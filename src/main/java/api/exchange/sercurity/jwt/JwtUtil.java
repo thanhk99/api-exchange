@@ -72,7 +72,7 @@ public class JwtUtil {
     public String generateAccessToken(User user) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("roles", user.getRoles());
-
+        claims.put("user-id", user.getUid());
         return Jwts.builder()
                 .claims(claims)
                 .subject(user.getEmail())
@@ -131,5 +131,13 @@ public class JwtUtil {
                 .build();
 
         tokenBlacklistRepository.save(blacklistedToken);
+    }
+
+    public int getUserIdFromToken(String token) {
+        Claims claims = jwtParser.parseSignedClaims(token).getPayload();
+        if (claims.get("user-id") == null) {
+            throw new IllegalArgumentException("Token does not contain user-id");
+        }
+        return claims.get("user-id", Integer.class);
     }
 }

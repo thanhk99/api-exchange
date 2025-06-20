@@ -113,6 +113,22 @@
 				</exclusion>
 			</exclusions>
 		</dependency>
+		<dependency>
+			<groupId>com.github.ua-parser</groupId>
+			<artifactId>uap-java</artifactId>
+			<version>1.5.3</version>
+		</dependency>
+		<dependency>
+			<groupId>org.yaml</groupId>
+			<artifactId>snakeyaml</artifactId>
+			<version>1.33</version> <!-- or newer stable version -->
+		</dependency>
+		<!-- GeoIP location -->
+		<dependency>
+			<groupId>com.maxmind.geoip2</groupId>
+			<artifactId>geoip2</artifactId>
+			<version>4.0.1</version>
+		</dependency>
 	</dependencies>
 
 	<build>

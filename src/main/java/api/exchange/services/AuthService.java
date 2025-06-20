@@ -1,25 +1,30 @@
 package api.exchange.services;
 
 import java.time.Instant;
-import java.util.Collections;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import api.exchange.dtos.Requset.LoginRequest;
 import api.exchange.dtos.Requset.SignupRequest;
 import api.exchange.dtos.Response.AuthResponse;
 import api.exchange.dtos.Response.RefreshTokenRequest;
 import api.exchange.models.User;
+import api.exchange.models.UserDevice;
 import api.exchange.models.refreshToken;
 import api.exchange.repository.RefreshTokenRepository;
 import api.exchange.repository.UserRepository;
 import api.exchange.sercurity.jwt.JwtUtil;
+import io.jsonwebtoken.Claims;
+import jakarta.servlet.http.HttpServletRequest;
 
 @Service
 public class AuthService {
@@ -38,7 +43,10 @@ public class AuthService {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
-    public ResponseEntity<?> signup(SignupRequest signupRequest) {
+    @Autowired
+    private DeviceService deviceService;
+
+    public ResponseEntity<?> signup(SignupRequest signupRequest, HttpServletRequest request) {
         if (userRepository.existsByEmail(signupRequest.getEmail())) {
             return ResponseEntity
                     .badRequest()
@@ -52,7 +60,6 @@ public class AuthService {
         user.setPassword(passwordEncoder.encode(signupRequest.getPassword()));
         user.setRoles("USER");
 
-        // Lưu user vào database
         User savedUser = userRepository.save(user);
 
         // Tạo JWT token
@@ -70,25 +77,43 @@ public class AuthService {
                         "email", savedUser.getEmail())));
     }
 
-    public ResponseEntity<?> loginService(LoginRequest loginRequest) {
-        authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(loginRequest.getEmail(), loginRequest.getPassword()));
-        User user = userRepository.findByEmail(loginRequest.getEmail());
-        if (user != null) {
-            new RuntimeException("User not found");
-        }
-        String accessToken = jwtUtil.generateAccessToken(user);
-        refreshToken refreshToken = jwtUtil.generateRefreshToken(user);
+    public ResponseEntity<?> loginService(LoginRequest loginRequest, HttpServletRequest request) {
+        try {
+            // 1. Xác thực thông tin đăng nhập
+            authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(
+                            loginRequest.getEmail(),
+                            loginRequest.getPassword()));
 
-        return ResponseEntity.ok(
-                new AuthResponse(
-                        accessToken,
-                        refreshToken.getToken(),
-                        user.getUid(),
-                        user.getEmail()));
+            // 2. Lấy thông tin user
+            User user = userRepository.findByEmail(loginRequest.getEmail());
+            if (user == null) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "Email already in use"));
+            }
+
+            UserDevice device = deviceService.saveDeviceInfo(user, request);
+
+            String accessToken = jwtUtil.generateAccessToken(user);
+            refreshToken refreshToken = jwtUtil.generateRefreshToken(user);
+            Map<String, Object> deviceRespone = deviceService.buildDeviceResponse(device);
+            return ResponseEntity.ok(
+                    new AuthResponse(
+                            accessToken,
+                            refreshToken.getToken(),
+                            user.getUid(),
+                            user.getEmail(),
+                            deviceRespone));
+
+        } catch (BadCredentialsException e) {
+            throw new RuntimeException("Invalid email or password", e);
+        } catch (Exception e) {
+            throw new RuntimeException("Login failed", e);
+        }
     }
 
-    public ResponseEntity<?> RefreshTokenService(RefreshTokenRequest refreshTokenRequest) {
+    @Transactional
+    public ResponseEntity<?> RefreshTokenService(RefreshTokenRequest refreshTokenRequest, HttpServletRequest request) {
         refreshToken refreshToken = refreshTokenRepository.findByToken(refreshTokenRequest.getRefreshToken());
         if (refreshToken == null) {
             new RuntimeException("Refresh Token Invalid");
@@ -110,12 +135,30 @@ public class AuthService {
                         newAccessToken,
                         newRefreshToken.getToken(),
                         user.getUid(),
-                        user.getEmail()));
+                        user.getEmail(),
+                        null));
     }
 
-    public ResponseEntity<?> LogoutService(String authHeader) {
-        String token = authHeader.substring(7);
-        jwtUtil.addToBlacklist(token);
-        return ResponseEntity.ok("Logout successful");
+    public ResponseEntity<?> LogoutService(String authHeader, HttpServletRequest request) {
+        try {
+            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(Map.of("error", "Invalid authorization header"));
+            }
+            String token = authHeader.substring(7);
+            int userId = jwtUtil.getUserIdFromToken(token);
+
+            jwtUtil.addToBlacklist(token);
+            // 3. Cập nhật trạng thái thiết bị
+            deviceService.deactivateDevice(request, userId);
+
+            return ResponseEntity.ok(Map.of(
+                    "message", "Đăng xuất thành công",
+                    // "deviceId", deviceId,
+                    "logoutTime", Instant.now()));
+
+        } catch (Exception e) {
+            throw new RuntimeException("Đăng xuất thất bại", e);
+        }
     }
 }
