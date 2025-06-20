@@ -1,4 +1,4 @@
-package api.exchange.dtos.Requset;
+package api.exchange.dtos.Response;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -7,16 +7,13 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Data
-@AllArgsConstructor
-@NoArgsConstructor
-@Setter
 @Getter
-public class SignupRequest {
-    private String username;
-
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+public class UserInfoResponse {
+    private long uid;
     private String email;
-
-    private String password;
-
+    private String username;
     private String nation;
 }

@@ -1,6 +1,8 @@
 package api.exchange.services;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,6 +14,9 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.server.ResponseStatusException;
 
 import api.exchange.dtos.Requset.LoginRequest;
 import api.exchange.dtos.Requset.SignupRequest;
@@ -23,7 +28,6 @@ import api.exchange.models.refreshToken;
 import api.exchange.repository.RefreshTokenRepository;
 import api.exchange.repository.UserRepository;
 import api.exchange.sercurity.jwt.JwtUtil;
-import io.jsonwebtoken.Claims;
 import jakarta.servlet.http.HttpServletRequest;
 
 @Service
@@ -46,46 +50,75 @@ public class AuthService {
     @Autowired
     private DeviceService deviceService;
 
-    public ResponseEntity<?> signup(SignupRequest signupRequest, HttpServletRequest request) {
-        if (userRepository.existsByEmail(signupRequest.getEmail())) {
+    @PostMapping("/signup")
+    public ResponseEntity<?> signup(@RequestBody SignupRequest signupRequest, HttpServletRequest request) {
+        try {
+            // Validate dữ liệu đầu vào
+            if (signupRequest.getEmail() == null || signupRequest.getEmail().isEmpty()) {
+                return ResponseEntity
+                        .badRequest()
+                        .body(Map.of(
+                                "error", "VALIDATION_ERROR",
+                                "message", "Email không được để trống",
+                                "field", "email"));
+            }
+
+            if (signupRequest.getPassword() == null || signupRequest.getPassword().length() < 6) {
+                return ResponseEntity
+                        .badRequest()
+                        .body(Map.of(
+                                "error", "VALIDATION_ERROR",
+                                "message", "Mật khẩu phải có ít nhất 6 ký tự",
+                                "field", "password"));
+            }
+
+            if (userRepository.existsByEmail(signupRequest.getEmail())) {
+                return ResponseEntity
+                        .status(HttpStatus.CONFLICT) // 409 Conflict
+                        .body(Map.of(
+                                "error", "EMAIL_EXISTS",
+                                "message", "Email đã được sử dụng",
+                                "field", "email"));
+            }
+
+            User user = new User();
+            user.setUsername(signupRequest.getUsername());
+            user.setEmail(signupRequest.getEmail());
+            user.setPassword(passwordEncoder.encode(signupRequest.getPassword()));
+            user.setRoles("USER");
+            user.setNation(signupRequest.getNation());
+
+            User savedUser = userRepository.save(user);
+
             return ResponseEntity
-                    .badRequest()
-                    .body(Map.of("message", "Email đã được sử dụng"));
+                    .status(HttpStatus.CREATED) // 201 Created
+                    .body(Map.of(
+                            "success", true,
+                            "message", "Đăng ký thành công",
+                            "data", Map.of(
+                                    "id", savedUser.getUid(),
+                                    "username", savedUser.getUsername(),
+                                    "email", savedUser.getEmail())));
+
+        } catch (Exception e) {
+            // Xử lý lỗi hệ thống
+            return ResponseEntity
+                    .internalServerError()
+                    .body(Map.of(
+                            "error", "SERVER_ERROR",
+                            "message", "Lỗi hệ thống: " + e.getMessage()));
         }
-
-        // Tạo user mới
-        User user = new User();
-        user.setUsername(signupRequest.getUsername());
-        user.setEmail(signupRequest.getEmail());
-        user.setPassword(passwordEncoder.encode(signupRequest.getPassword()));
-        user.setRoles("USER");
-
-        User savedUser = userRepository.save(user);
-
-        // Tạo JWT token
-        String accessToken = jwtUtil.generateAccessToken(savedUser);
-        refreshToken refreshToken = jwtUtil.generateRefreshToken(savedUser);
-
-        // Trả về response
-        return ResponseEntity.ok(Map.of(
-                "message", "Đăng ký thành công",
-                "accessToken", accessToken,
-                "refreshToken", refreshToken.getToken(),
-                "user", Map.of(
-                        "id", savedUser.getUid(),
-                        "username", savedUser.getUsername(),
-                        "email", savedUser.getEmail())));
     }
 
     public ResponseEntity<?> loginService(LoginRequest loginRequest, HttpServletRequest request) {
         try {
-            // 1. Xác thực thông tin đăng nhập
+            // Xác thực thông tin đăng nhập
             authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(
                             loginRequest.getEmail(),
                             loginRequest.getPassword()));
 
-            // 2. Lấy thông tin user
+            // Lấy thông tin user
             User user = userRepository.findByEmail(loginRequest.getEmail());
             if (user == null) {
                 return ResponseEntity.badRequest()
@@ -93,10 +126,12 @@ public class AuthService {
             }
 
             UserDevice device = deviceService.saveDeviceInfo(user, request);
-
+            LocalDateTime lastLogin = LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh"));
+            user.setLastLogin(lastLogin);
             String accessToken = jwtUtil.generateAccessToken(user);
             refreshToken refreshToken = jwtUtil.generateRefreshToken(user);
             Map<String, Object> deviceRespone = deviceService.buildDeviceResponse(device);
+
             return ResponseEntity.ok(
                     new AuthResponse(
                             accessToken,
@@ -106,7 +141,11 @@ public class AuthService {
                             deviceRespone));
 
         } catch (BadCredentialsException e) {
-            throw new RuntimeException("Invalid email or password", e);
+            return ResponseEntity
+                    .badRequest()
+                    .body(Map.of(
+                            "error", "LOGIN_ERROR",
+                            "message", "Tài khoản mật khẩu không đúng"));
         } catch (Exception e) {
             throw new RuntimeException("Login failed", e);
         }
@@ -114,29 +153,43 @@ public class AuthService {
 
     @Transactional
     public ResponseEntity<?> RefreshTokenService(RefreshTokenRequest refreshTokenRequest, HttpServletRequest request) {
-        refreshToken refreshToken = refreshTokenRepository.findByToken(refreshTokenRequest.getRefreshToken());
-        if (refreshToken == null) {
-            new RuntimeException("Refresh Token Invalid");
-        }
+        try {
+            String requestRefreshToken = refreshTokenRequest.getRefreshToken();
+            if (requestRefreshToken == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(Map.of("error", "Invalid refresh token"));
+            }
 
-        if (refreshToken.getExpiresAt().isBefore(Instant.now())) {
+            refreshToken refreshToken = refreshTokenRepository.findByToken(requestRefreshToken);
+            if (refreshToken == null) {
+                new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Refresh token not found");
+            }
+
+            if (refreshToken.getExpiresAt().isBefore(Instant.now())) {
+                refreshTokenRepository.delete(refreshToken);
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Refresh token expired");
+            }
             refreshTokenRepository.delete(refreshToken);
-            throw new RuntimeException("Refresh Token was expired");
+
+            // Tạo token mới
+            User user = refreshToken.getUser();
+            String newAccessToken = jwtUtil.generateAccessToken(user);
+            refreshToken newRefreshToken = jwtUtil.generateRefreshToken(user);
+
+            // Trả về response
+            return ResponseEntity.ok(
+                    new AuthResponse(
+                            newAccessToken,
+                            newRefreshToken.getToken(),
+                            user.getUid(),
+                            user.getEmail(),
+                            null));
+
+        } catch (ResponseStatusException e) {
+            throw e; // Re-throw các lỗi đã được định nghĩa
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to refresh token");
         }
-
-        User user = refreshToken.getUser();
-        String newAccessToken = jwtUtil.generateAccessToken(user);
-        refreshToken newRefreshToken = jwtUtil.generateRefreshToken(user);
-
-        refreshTokenRepository.delete(refreshToken);
-
-        return ResponseEntity.ok(
-                new AuthResponse(
-                        newAccessToken,
-                        newRefreshToken.getToken(),
-                        user.getUid(),
-                        user.getEmail(),
-                        null));
     }
 
     public ResponseEntity<?> LogoutService(String authHeader, HttpServletRequest request) {
@@ -147,14 +200,12 @@ public class AuthService {
             }
             String token = authHeader.substring(7);
             int userId = jwtUtil.getUserIdFromToken(token);
-
             jwtUtil.addToBlacklist(token);
-            // 3. Cập nhật trạng thái thiết bị
+            // Cập nhật trạng thái thiết bị
             deviceService.deactivateDevice(request, userId);
 
             return ResponseEntity.ok(Map.of(
                     "message", "Đăng xuất thành công",
-                    // "deviceId", deviceId,
                     "logoutTime", Instant.now()));
 
         } catch (Exception e) {

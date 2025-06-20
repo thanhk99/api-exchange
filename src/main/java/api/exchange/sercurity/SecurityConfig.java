@@ -34,7 +34,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth // Sử dụng authorizeHttpRequests thay vì authorizeRequests
                         .requestMatchers(
                                 "/api/v1/auth/login",
-                                "/api/v1/auth/signup")
+                                "/api/v1/auth/signup",
+                                "/api/v1/auth/refresh")
                         .permitAll()
                         .anyRequest().authenticated())
                 .sessionManagement(session -> session
