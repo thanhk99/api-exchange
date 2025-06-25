@@ -46,4 +46,9 @@ public class User {
     @UpdateTimestamp
     private LocalDateTime lastLogin;
 
+    private LocalDateTime otp_verify;
+
+    private Long login_fail_count;
+
+    private String anti_frau_code;
 }

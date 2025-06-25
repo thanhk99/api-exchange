@@ -33,6 +33,7 @@ public class coinService {
 
     private static final List<String> TRACKED_SYMBOLS = List.of("BTC", "ETH", "BNB");
     private static final String BINANCE_API_URL = "https://api.binance.com/api/v3";
+    private static final String API_RATE_COIN_FIAT = "https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=usd,vnd";
 
     // @PostConstruct
     // public void fetchInitialData() {
