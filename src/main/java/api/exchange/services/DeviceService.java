@@ -116,7 +116,7 @@ public class DeviceService {
     }
 
     @Transactional
-    public void deactivateDevice(HttpServletRequest request, int userId) {
+    public void deactivateDevice(HttpServletRequest request, UUID userId) {
         String userAgent = request.getHeader("User-Agent");
         Parser uaParser = new Parser();
         Client client = uaParser.parse(userAgent);
@@ -165,7 +165,7 @@ public class DeviceService {
             }
 
             // 3. Get user information
-            int uid = jwtUtil.getUserIdFromToken(token);
+            UUID uid = jwtUtil.getUserIdFromToken(token);
             User user = userRepository.getByUid(uid);
             if (user == null) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)

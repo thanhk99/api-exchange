@@ -63,8 +63,8 @@ public class P2PAd {
     @Column(name = "created_at", updatable = false)
     private Instant createdAt = Instant.now();
 
-    @OneToMany(mappedBy = "ad", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<Order> orders;
+    // @OneToMany(mappedBy = "ad", cascade = CascadeType.ALL, orphanRemoval = true)
+    // private List<Order> orders;
 
     public enum TradeType {
         BUY, SELL

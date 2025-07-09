@@ -101,6 +101,7 @@ public class JwtUtil {
     // Xác thực token
     public boolean validateToken(String token) {
         try {
+            System.out.println(token);
             // Kiểm tra trong blacklist
             if (tokenBlacklistRepository.existsByToken(token)) {
                 return false;
@@ -133,11 +134,20 @@ public class JwtUtil {
         tokenBlacklistRepository.save(blacklistedToken);
     }
 
-    public int getUserIdFromToken(String token) {
+    public UUID getUserIdFromToken(String token) {
         Claims claims = jwtParser.parseSignedClaims(token).getPayload();
-        if (claims.get("user-id") == null) {
+        Object userIdValue = claims.get("user-id");
+
+        if (userIdValue == null) {
             throw new IllegalArgumentException("Token does not contain user-id");
         }
-        return claims.get("user-id", Integer.class);
+
+        if (userIdValue instanceof UUID) {
+            return (UUID) userIdValue;
+        } else if (userIdValue instanceof String) {
+            return UUID.fromString((String) userIdValue);
+        } else {
+            throw new IllegalArgumentException("user-id claim is not a valid UUID format");
+        }
     }
 }

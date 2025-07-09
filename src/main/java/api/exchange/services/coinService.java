@@ -5,6 +5,7 @@ import java.time.*;
 import java.util.*;
 
 import org.springframework.beans.factory.annotation.*;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.*;
 import org.springframework.scheduling.annotation.EnableScheduling;
@@ -36,24 +37,24 @@ public class coinService {
     private static final String API_RATE_COIN_FIAT = "https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=usd,vnd";
 
     // @PostConstruct
-    // public void fetchInitialData() {
-    // log.info("Starting initial data fetch for {} coins", TRACKED_SYMBOLS.size());
+    public void fetchInitialData() {
+        log.info("Starting initial data fetch for {} coins", TRACKED_SYMBOLS.size());
 
-    // TRACKED_SYMBOLS.forEach(symbol -> {
-    // try {
-    // // 1. Lấy thông tin cơ bản của coin
-    // fetchAndSaveCoinInfo(symbol);
+        TRACKED_SYMBOLS.forEach(symbol -> {
+            try {
+                // Lấy thông tin cơ bản của coin
+                fetchAndSaveCoinInfo(symbol);
 
-    // // 2. Lấy lịch sử giá 24h với khung 5 phút
-    // fetchAndSavePriceHistory(symbol, "5m", 288); // 288 nến = 24h (5m/nến)
+                // Lấy lịch sử giá 24h với khung 5 phút
+                fetchAndSavePriceHistory(symbol, "5m", 288);
 
-    // log.info("Completed initial data fetch for {}", symbol);
-    // } catch (Exception e) {
-    // log.error("Failed to fetch initial data for {}: {}", symbol, e.getMessage());
-    // throw new RuntimeException("Initial data fetch failed for " + symbol, e);
-    // }
-    // });
-    // }
+                log.info("Completed initial data fetch for {}", symbol);
+            } catch (Exception e) {
+                log.error("Failed to fetch initial data for {}: {}", symbol, e.getMessage());
+                throw new RuntimeException("Initial data fetch failed for " + symbol, e);
+            }
+        });
+    }
 
     private void fetchAndSaveCoinInfo(String symbol) {
 
@@ -236,5 +237,10 @@ public class coinService {
 
             }
         });
+    }
+
+    @Cacheable(value = "hisPriceCoin", key = "#entity.name", unless = "#result == null")
+    public List<priceHistoryModel> getListHisCoin(coinModel entity) {
+        return priceHistoryRepository.findTop288BySymbolOrderByTimestampDesc(entity.getName());
     }
 }

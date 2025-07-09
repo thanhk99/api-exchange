@@ -1,5 +1,7 @@
 package api.exchange.services;
 
+import java.util.UUID;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
@@ -18,7 +20,7 @@ public class UserService {
 
     public ResponseEntity<?> getProfileService(String authHeader) {
         String token = authHeader.substring(7);
-        int userId = jwtUtil.getUserIdFromToken(token);
+        UUID userId = jwtUtil.getUserIdFromToken(token);
         User user = userRepository.getByUid(userId);
         return ResponseEntity.ok(
                 new UserInfoResponse(

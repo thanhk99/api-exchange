@@ -1,6 +1,7 @@
 package api.exchange.services;
 
 import java.util.Map;
+import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -39,7 +40,7 @@ public class PasswordService {
         }
 
         // Get user information
-        int uid = jwtUtil.getUserIdFromToken(token);
+        UUID uid = jwtUtil.getUserIdFromToken(token);
         User user = userRepository.getByUid(uid);
         if (user == null) {
             return buildErrorResponse(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "User not found");
@@ -85,7 +86,7 @@ public class PasswordService {
         }
 
         // Get user information
-        int uid = jwtUtil.getUserIdFromToken(token);
+        UUID uid = jwtUtil.getUserIdFromToken(token);
         User user = userRepository.getByUid(uid);
         if (user == null) {
             return buildErrorResponse(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "User not found");

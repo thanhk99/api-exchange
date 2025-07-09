@@ -1,5 +1,6 @@
 package api.exchange.models;
 
+import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
@@ -11,7 +12,7 @@ import lombok.*;
 @Setter
 @Getter
 @NoArgsConstructor
-public class coinModel {
+public class coinModel implements Serializable {
     @Id
     @Column(name = "id", length = 10)
     private String id; // "BTC", "ETH"

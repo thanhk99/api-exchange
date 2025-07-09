@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Map;
+import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -194,12 +195,13 @@ public class AuthService {
 
     public ResponseEntity<?> LogoutService(String authHeader, HttpServletRequest request) {
         try {
+            System.out.println(authHeader);
             if (authHeader == null || !authHeader.startsWith("Bearer ")) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                         .body(Map.of("error", "Invalid authorization header"));
             }
             String token = authHeader.substring(7);
-            int userId = jwtUtil.getUserIdFromToken(token);
+            UUID userId = jwtUtil.getUserIdFromToken(token);
             jwtUtil.addToBlacklist(token);
             // Cập nhật trạng thái thiết bị
             deviceService.deactivateDevice(request, userId);

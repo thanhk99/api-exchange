@@ -1,8 +1,11 @@
 package api.exchange.models;
 
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.UUID;
 
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.GenericGenerator;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import jakarta.persistence.*;
@@ -16,9 +19,11 @@ import lombok.*;
 @AllArgsConstructor
 @Builder
 public class User {
+    @SuppressWarnings("deprecation")
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private long uid;
+    @GeneratedValue(generator = "UUID")
+    @GenericGenerator(name = "UUID", strategy = "org.hibernate.id.UUIDGenerator")
+    private UUID uid;
 
     @Column(name = "username", nullable = false, length = 50)
     private String username;
@@ -51,4 +56,13 @@ public class User {
     private Long login_fail_count;
 
     private String anti_frau_code;
+
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL)
+    private List<FundingWallet> fundingWallets;
+
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL)
+    private List<TradingWallet> tradingWallets;
+
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL)
+    private List<EarnWallet> earnWallets;
 }

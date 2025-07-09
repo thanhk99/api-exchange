@@ -5,66 +5,60 @@ import jakarta.persistence.*;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.GenericGenerator;
+import org.hibernate.annotations.UpdateTimestamp;
 
 @Entity
-@Table(name = "orders")
+@Table(name = "orders", indexes = {
+        @Index(name = "idx_orders_order_id", columnList = "order_id") // Thêm index
+})
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 public class Order {
-
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private long id;
+    @GeneratedValue(generator = "UUID")
+    @GenericGenerator(name = "UUID", strategy = "org.hibernate.id.UUIDGenerator")
+    @Column(name = "order_id", columnDefinition = "BINARY(16)")
+    private UUID orderId;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "ad_id")
-    private P2PAd ad;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "buyer_id", referencedColumnName = "uid", nullable = false)
-    private User buyer;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "seller_id", referencedColumnName = "uid", nullable = false)
-    private User seller;
-
-    @Column(precision = 20, scale = 2, nullable = false)
-    private BigDecimal amount;
-
-    @Column(name = "fiat_amount", precision = 20, scale = 2, nullable = false)
-    private BigDecimal fiatAmount;
-
-    @Column(precision = 20, scale = 2)
-    private BigDecimal fee = BigDecimal.ZERO;
+    @JoinColumn(name = "uid", nullable = false, referencedColumnName = "uid")
+    private User user;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "fee_payer")
-    private FeePayer feePayer = FeePayer.BUYER;
-
-    @Column(name = "escrow_address", length = 255)
-    private String escrowAddress;
-
-    @Column(name = "payment_proof", columnDefinition = "text")
-    private String paymentProof;
+    @Column(nullable = false)
+    private OrderType type;
 
     @Enumerated(EnumType.STRING)
-    private OrderStatus status = OrderStatus.PENDING;
+    private OrderStatus status;
 
-    @Column(name = "chat_id", length = 36)
-    private String chatId;
+    @CreationTimestamp
+    private LocalDateTime createdAt;
 
-    @Column(name = "created_at", updatable = false)
-    private Instant createdAt = Instant.now();
+    @UpdateTimestamp
+    private LocalDateTime updatedAt;
 
-    @Column(name = "completed_at")
-    private Instant completedAt;
+    // Composition relationships
+    @OneToOne(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
+    private TradingOrderDetail tradingDetail;
 
-    public enum OrderStatus {
-        PENDING, PAID, CANCELLED, COMPLETED, DISPUTE, REFUNDED
+    @OneToOne(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
+    private P2POrderDetail p2pDetail;
+
+    @OneToOne(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
+    private EarnOrderDetail earnDetail;
+
+    // Enums
+    public enum OrderType {
+        TRADING, P2P, EARN, OTC
     }
 
-    public enum FeePayer {
-        BUYER, SELLER, SPLIT
+    public enum OrderStatus {
+        PENDING, COMPLETED, CANCELLED, FAILED
     }
 }
