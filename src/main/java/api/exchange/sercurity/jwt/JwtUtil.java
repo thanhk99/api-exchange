@@ -134,20 +134,14 @@ public class JwtUtil {
         tokenBlacklistRepository.save(blacklistedToken);
     }
 
-    public UUID getUserIdFromToken(String token) {
+    public String getUserIdFromToken(String token) {
         Claims claims = jwtParser.parseSignedClaims(token).getPayload();
         Object userIdValue = claims.get("user-id");
 
         if (userIdValue == null) {
             throw new IllegalArgumentException("Token does not contain user-id");
-        }
-
-        if (userIdValue instanceof UUID) {
-            return (UUID) userIdValue;
-        } else if (userIdValue instanceof String) {
-            return UUID.fromString((String) userIdValue);
         } else {
-            throw new IllegalArgumentException("user-id claim is not a valid UUID format");
+            return userIdValue.toString();
         }
     }
 }

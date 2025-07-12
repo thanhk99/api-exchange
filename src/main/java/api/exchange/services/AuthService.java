@@ -201,7 +201,7 @@ public class AuthService {
                         .body(Map.of("error", "Invalid authorization header"));
             }
             String token = authHeader.substring(7);
-            UUID userId = jwtUtil.getUserIdFromToken(token);
+            String userId = jwtUtil.getUserIdFromToken(token);
             jwtUtil.addToBlacklist(token);
             // Cập nhật trạng thái thiết bị
             deviceService.deactivateDevice(request, userId);

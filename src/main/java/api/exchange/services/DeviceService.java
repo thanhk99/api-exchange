@@ -116,13 +116,13 @@ public class DeviceService {
     }
 
     @Transactional
-    public void deactivateDevice(HttpServletRequest request, UUID userId) {
+    public void deactivateDevice(HttpServletRequest request, String userId) {
         String userAgent = request.getHeader("User-Agent");
         Parser uaParser = new Parser();
         Client client = uaParser.parse(userAgent);
         String ipAdress = request.getRemoteAddr();
         String browserName = client.userAgent.family;
-        userDeviceRepository.findByIpAddressAndBrowserNameAndUser_Uid(ipAdress, browserName, userId)
+        userDeviceRepository.findByIpAddressAndBrowserNameAndUser_UidAndIsActive(ipAdress, browserName, userId, true)
                 .ifPresent(device -> {
                     device.setActive(false);
                     device.setLogoutAt(Instant.now()); // Thêm trường logoutAt nếu cần
@@ -165,7 +165,7 @@ public class DeviceService {
             }
 
             // 3. Get user information
-            UUID uid = jwtUtil.getUserIdFromToken(token);
+            String uid = jwtUtil.getUserIdFromToken(token);
             User user = userRepository.getByUid(uid);
             if (user == null) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)

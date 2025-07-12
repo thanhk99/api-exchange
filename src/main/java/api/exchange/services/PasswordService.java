@@ -40,7 +40,7 @@ public class PasswordService {
         }
 
         // Get user information
-        UUID uid = jwtUtil.getUserIdFromToken(token);
+        String uid = jwtUtil.getUserIdFromToken(token);
         User user = userRepository.getByUid(uid);
         if (user == null) {
             return buildErrorResponse(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "User not found");
@@ -86,7 +86,7 @@ public class PasswordService {
         }
 
         // Get user information
-        UUID uid = jwtUtil.getUserIdFromToken(token);
+        String uid = jwtUtil.getUserIdFromToken(token);
         User user = userRepository.getByUid(uid);
         if (user == null) {
             return buildErrorResponse(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "User not found");

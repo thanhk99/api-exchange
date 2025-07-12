@@ -20,7 +20,7 @@ public class UserService {
 
     public ResponseEntity<?> getProfileService(String authHeader) {
         String token = authHeader.substring(7);
-        UUID userId = jwtUtil.getUserIdFromToken(token);
+        String userId = jwtUtil.getUserIdFromToken(token);
         User user = userRepository.getByUid(userId);
         return ResponseEntity.ok(
                 new UserInfoResponse(

@@ -1,7 +1,5 @@
 package api.exchange.dtos.Response;
 
-import java.util.UUID;
-
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.Getter;
@@ -14,7 +12,7 @@ import lombok.Setter;
 @NoArgsConstructor
 @AllArgsConstructor
 public class UserInfoResponse {
-    private UUID uid;
+    private String uid;
     private String email;
     private String username;
     private String nation;
