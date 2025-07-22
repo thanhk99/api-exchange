@@ -4,8 +4,6 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Map;
-import java.util.UUID;
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -166,10 +164,11 @@ public class AuthService {
                 new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Refresh token not found");
             }
 
-            if (refreshToken.getExpiresAt().isBefore(Instant.now())) {
-                refreshTokenRepository.delete(refreshToken);
-                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Refresh token expired");
-            }
+            // if (refreshToken.getExpiresAt().isBefore(Instant.now())) {
+            // refreshTokenRepository.delete(refreshToken);
+            // throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Refresh token
+            // expired");
+            // }
             refreshTokenRepository.delete(refreshToken);
 
             // Tạo token mới
@@ -193,18 +192,13 @@ public class AuthService {
         }
     }
 
-    public ResponseEntity<?> LogoutService(String authHeader, HttpServletRequest request) {
+    public ResponseEntity<?> revokeDevice(String authHeader, UserDevice userDevice) {
         try {
-            System.out.println(authHeader);
-            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                        .body(Map.of("error", "Invalid authorization header"));
-            }
+            String device_id = userDevice.getDeviceId();
             String token = authHeader.substring(7);
-            String userId = jwtUtil.getUserIdFromToken(token);
             jwtUtil.addToBlacklist(token);
             // Cập nhật trạng thái thiết bị
-            deviceService.deactivateDevice(request, userId);
+            deviceService.deactivateDevice(device_id);
 
             return ResponseEntity.ok(Map.of(
                     "message", "Đăng xuất thành công",

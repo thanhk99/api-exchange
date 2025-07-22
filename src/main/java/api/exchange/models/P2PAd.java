@@ -4,8 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.math.BigDecimal;
-import java.time.Instant;
-import java.util.List;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "p2p_ads")
@@ -18,9 +17,8 @@ public class P2PAd {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private long id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "merchant_id", nullable = false, referencedColumnName = "id")
-    private Merchant merchant;
+    @JoinColumn(name = "user_id", nullable = false)
+    private String userId;
 
     @Column(nullable = false)
     private String asset; // USDT, BTC...
@@ -48,7 +46,7 @@ public class P2PAd {
     @Column(name = "available_amount", precision = 20, scale = 2, nullable = false)
     private BigDecimal availableAmount;
 
-    @Column(name = "payment_methods", columnDefinition = "JSON", nullable = false)
+    @Column(name = "payment_methods", nullable = false)
     private String paymentMethods; // JSON: ["BankTransfer", "Momo"]
 
     @Column(name = "terms_conditions", columnDefinition = "text")
@@ -58,10 +56,10 @@ public class P2PAd {
     private Boolean isActive = true;
 
     @Column(name = "expires_at")
-    private Instant expiresAt;
+    private LocalDateTime expiresAt;
 
     @Column(name = "created_at", updatable = false)
-    private Instant createdAt = Instant.now();
+    private LocalDateTime createdAt;
 
     // @OneToMany(mappedBy = "ad", cascade = CascadeType.ALL, orphanRemoval = true)
     // private List<Order> orders;

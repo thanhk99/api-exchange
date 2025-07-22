@@ -1,9 +1,6 @@
 package api.exchange.models;
 
-import java.time.Instant;
-import java.util.UUID;
-
-import org.hibernate.annotations.GenericGenerator;
+import java.time.LocalDateTime;
 
 import jakarta.persistence.*;
 import lombok.*;
@@ -17,11 +14,9 @@ import lombok.*;
 @AllArgsConstructor
 @Builder
 public class refreshToken {
-    @SuppressWarnings("deprecation")
     @Id
-    @GeneratedValue(generator = "UUID")
-    @GenericGenerator(name = "UUID", strategy = "org.hibernate.id.UUIDGenerator")
-    private UUID id;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private int id;
 
     @OneToOne
     @JoinColumn(name = "uid", referencedColumnName = "uid")
@@ -31,5 +26,5 @@ public class refreshToken {
     private String token;
 
     @Column(nullable = false)
-    private Instant expiresAt;
+    private LocalDateTime expiresAt;
 }

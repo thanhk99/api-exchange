@@ -10,7 +10,7 @@ import api.exchange.models.User;
 import api.exchange.models.refreshToken;
 
 @Repository
-public interface RefreshTokenRepository extends JpaRepository<refreshToken, UUID> {
+public interface RefreshTokenRepository extends JpaRepository<refreshToken, Integer> {
 
     refreshToken findByToken(String token);
 

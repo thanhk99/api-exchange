@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.*;
 import api.exchange.dtos.Requset.LoginRequest;
 import api.exchange.dtos.Requset.SignupRequest;
 import api.exchange.dtos.Response.RefreshTokenRequest;
+import api.exchange.models.UserDevice;
 import api.exchange.services.AuthService;
 import jakarta.servlet.http.HttpServletRequest;
 
@@ -34,8 +35,8 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<?> logout(@RequestHeader("Authorization") String authHeader, HttpServletRequest request) {
-        return authService.LogoutService(authHeader, request);
+    public ResponseEntity<?> logout(@RequestHeader("Authorization") String authHeader, @RequestBody UserDevice entity) {
+        return authService.revokeDevice(authHeader, entity);
     }
 
 }

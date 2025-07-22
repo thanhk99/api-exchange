@@ -1,6 +1,8 @@
 package api.exchange.sercurity.jwt;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
@@ -37,7 +39,7 @@ public class JwtUtil {
     private long accessTokenExpirationMs;
 
     @Value("${jwt.refreshToken.expiration}")
-    private long refreshTokenExpirationMs;
+    private long refreshTokenExpirationDay;
 
     @Autowired
     private RefreshTokenRepository refreshTokenRepository;
@@ -78,7 +80,7 @@ public class JwtUtil {
                 .subject(user.getEmail())
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + accessTokenExpirationMs))
-                .signWith(key)
+                .signWith(key, Jwts.SIG.HS256)
                 .compact();
     }
 
@@ -88,11 +90,12 @@ public class JwtUtil {
         refreshTokenRepository.findByUser(user)
                 .ifPresent(refreshTokenRepository::delete);
 
+        LocalDateTime timeNow = LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh"));
         // Tạo token mới
         refreshToken newToken = refreshToken.builder()
                 .user(user)
                 .token(UUID.randomUUID().toString())
-                .expiresAt(Instant.now().plusMillis(refreshTokenExpirationMs))
+                .expiresAt(timeNow.plusDays(refreshTokenExpirationDay))
                 .build();
 
         return refreshTokenRepository.save(newToken);

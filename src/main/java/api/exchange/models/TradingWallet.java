@@ -20,7 +20,7 @@ public class TradingWallet {
     private UUID walletId;
 
     @ManyToOne
-    @JoinColumn(name = "uid", nullable = false)
+    @JoinColumn(name = "uid", referencedColumnName = "uid", nullable = false)
     private User user;
 
     @Column(nullable = false, length = 10)

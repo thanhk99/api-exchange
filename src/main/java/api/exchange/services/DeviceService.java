@@ -116,16 +116,11 @@ public class DeviceService {
     }
 
     @Transactional
-    public void deactivateDevice(HttpServletRequest request, String userId) {
-        String userAgent = request.getHeader("User-Agent");
-        Parser uaParser = new Parser();
-        Client client = uaParser.parse(userAgent);
-        String ipAdress = request.getRemoteAddr();
-        String browserName = client.userAgent.family;
-        userDeviceRepository.findByIpAddressAndBrowserNameAndUser_UidAndIsActive(ipAdress, browserName, userId, true)
+    public void deactivateDevice(String deviceId) {
+        userDeviceRepository.findByDeviceId(deviceId)
                 .ifPresent(device -> {
                     device.setActive(false);
-                    device.setLogoutAt(Instant.now()); // Thêm trường logoutAt nếu cần
+                    device.setLogoutAt(Instant.now());
                     userDeviceRepository.save(device);
                 });
     }
@@ -145,28 +140,11 @@ public class DeviceService {
 
     public ResponseEntity<?> getListDevice(String authHeader) {
         try {
-            // 1. Validate authorization header
-            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body(Map.of(
-                                "status", "ERROR",
-                                "code", "INVALID_AUTH_HEADER",
-                                "message", "Invalid authorization header format"));
-            }
-
-            // 2. Extract and validate token
+            // Extract and validate token
             String token = authHeader.substring(7);
-            if (!jwtUtil.validateToken(token)) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body(Map.of(
-                                "status", "ERROR",
-                                "code", "INVALID_TOKEN",
-                                "message", "Token is not valid"));
-            }
-
-            // 3. Get user information
+            // Get user information
             String uid = jwtUtil.getUserIdFromToken(token);
-            User user = userRepository.getByUid(uid);
+            User user = userRepository.findByUid(uid);
             if (user == null) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(Map.of(
@@ -188,7 +166,9 @@ public class DeviceService {
                 deviceResponses.add(deviceResponse);
             }
 
-            return ResponseEntity.ok(deviceResponses);
+            return ResponseEntity.ok(Map.of(
+                    "message", "success",
+                    "data", deviceResponses));
 
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -198,4 +178,5 @@ public class DeviceService {
                             "message", "An unexpected error occurred"));
         }
     }
+
 }

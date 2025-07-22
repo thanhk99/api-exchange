@@ -3,10 +3,8 @@ package api.exchange.models;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Random;
-import java.util.UUID;
 
 import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.GenericGenerator;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import jakarta.persistence.*;
@@ -39,13 +37,14 @@ public class User {
 
     @Column(name = "password_level2", nullable = true, length = 6)
     private String passwordLevel2;
+
     @Column(name = "nation", nullable = false, length = 20)
     private String nation;
 
     @CreationTimestamp
     private LocalDateTime createdAt;
 
-    @UpdateTimestamp
+    @Column(name = "last_login")
     private LocalDateTime lastLogin;
 
     private LocalDateTime otp_verify;
@@ -53,15 +52,6 @@ public class User {
     private Long login_fail_count;
 
     private String anti_frau_code;
-
-    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL)
-    private List<FundingWallet> fundingWallets;
-
-    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL)
-    private List<TradingWallet> tradingWallets;
-
-    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL)
-    private List<EarnWallet> earnWallets;
 
     public User() {
         this.uid = generateUID(18);

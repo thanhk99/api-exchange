@@ -28,7 +28,8 @@ public class Merchant {
     @Column(name = "success_rate", precision = 5, scale = 2)
     private BigDecimal successRate = BigDecimal.ZERO;
 
-    @OneToMany(mappedBy = "merchant", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<P2PAd> ads;
+    // @OneToMany(mappedBy = "merchant", cascade = CascadeType.ALL, orphanRemoval =
+    // true)
+    // private List<P2PAd> ads;
 
 }
