@@ -10,6 +10,8 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class UserP2PResponse {
+    private Long id;
+    private String uid;
     private String name;
     private Long totalTransfer;
     private double percentComplete;

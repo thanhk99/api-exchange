@@ -11,7 +11,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
 import api.exchange.dtos.Response.UserP2PResponse;
+import api.exchange.models.FundingWallet;
 import api.exchange.models.P2PAd;
+import api.exchange.models.TransactionAds;
+import api.exchange.repository.FundingWalletRepository;
 import api.exchange.repository.P2PAdRepository;
 import api.exchange.repository.TransactionsAdsRepository;
 import api.exchange.repository.UserRepository;
@@ -31,6 +34,9 @@ public class P2PADService {
 
     @Autowired
     private JwtUtil jwtUtil;
+
+    @Autowired
+    private FundingWalletRepository fundingWalletRepository;
 
     public ResponseEntity<?> createAddP2P(P2PAd p2pAd, String authHeader) {
         try {
@@ -65,6 +71,8 @@ public class P2PADService {
             Long totalTransfer = transactionsAdsRepository.countCompletedTransactions((p2pAd.getUserId()));
 
             UserP2PResponse userP2PResponse = new UserP2PResponse(
+                    p2pAd.getId(),
+                    p2pAd.getUserId(),
                     name,
                     totalTransfer,
                     0,
@@ -79,5 +87,14 @@ public class P2PADService {
             listP2PResponse.add(userP2PResponse);
         }
         return ResponseEntity.ok(Map.of("message", "success", "data", listP2PResponse));
+    }
+
+    public void lockCoinP2P(TransactionAds transactionAds) {
+        try {
+            FundingWallet fundingWallet = fundingWalletRepository.findByUid(transactionAds.getFromUser());
+            fundingWallet.setLockedBalance(transactionAds.getCoinAmount());
+        } catch (Exception e) {
+            System.out.println(e);
+        }
     }
 }

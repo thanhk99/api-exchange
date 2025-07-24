@@ -1,10 +1,6 @@
 package api.exchange.models;
 
 import java.math.BigDecimal;
-import java.util.UUID;
-
-import org.hibernate.annotations.GenericGenerator;
-
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -15,9 +11,8 @@ import lombok.*;
 @AllArgsConstructor
 public class EarnProduct {
     @Id
-    @GeneratedValue(generator = "UUID")
-    @GenericGenerator(name = "UUID", strategy = "org.hibernate.id.UUIDGenerator")
-    private UUID productId;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
     @Column(nullable = false, length = 100)
     private String name;
@@ -28,10 +23,20 @@ public class EarnProduct {
     @Column(precision = 5, scale = 2)
     private BigDecimal apy = BigDecimal.ZERO;
 
-    private Integer durationDays;
-
     @Column(precision = 24, scale = 8)
     private BigDecimal minAmount = BigDecimal.ZERO;
+
+    @Column(name = "product_type", nullable = false)
+    private String productType;
+
+    @Column(name = "create_dt")
+    private BigDecimal createDt;
+
+    @Column(name = "update_dt")
+    private BigDecimal updateDt;
+
+    @Column(name = "duration_days")
+    private int durationDays;
 
     private boolean isActive = true;
 }

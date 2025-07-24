@@ -1,12 +1,6 @@
 package api.exchange.models;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
-import java.util.UUID;
-
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.GenericGenerator;
-
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -17,33 +11,25 @@ import lombok.*;
 @AllArgsConstructor
 public class EarnWallet {
     @Id
-    @GeneratedValue(generator = "UUID")
-    @GenericGenerator(name = "UUID", strategy = "org.hibernate.id.UUIDGenerator")
-    private UUID walletId;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long walletId;
 
-    @ManyToOne
-    @JoinColumn(name = "user_id", nullable = false)
-    private User user;
+    @Column(name = "uid", nullable = false)
+    private Long uid;
 
-    @ManyToOne
-    @JoinColumn(name = "product_id")
-    private EarnProduct product;
+    // @ManyToOne
+    // @JoinColumn(name = "product_id")
+    // private EarnProduct product;
 
     @Column(nullable = false, length = 10)
     private String currency;
 
-    @Column(precision = 24, scale = 8)
-    private BigDecimal investedAmount = BigDecimal.ZERO;
+    @Column(name = "total_balance", precision = 24, scale = 8)
+    private BigDecimal totalBalance = BigDecimal.ZERO;
 
-    @CreationTimestamp
-    private LocalDateTime startDate;
+    @Column(name = "avaiable_balance")
+    private BigDecimal availableBalance = BigDecimal.ZERO;
 
-    private LocalDateTime endDate;
-
-    @Enumerated(EnumType.STRING)
-    private EarnStatus status;
-
-    public enum EarnStatus {
-        ACTIVE, COMPLETED, CANCELLED
-    }
+    @Column(name = "locked_balance ")
+    private BigDecimal lockedBalance = BigDecimal.ZERO;
 }

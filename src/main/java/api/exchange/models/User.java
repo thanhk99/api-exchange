@@ -1,12 +1,8 @@
 package api.exchange.models;
 
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.Random;
-
 import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
-
 import jakarta.persistence.*;
 import lombok.*;
 

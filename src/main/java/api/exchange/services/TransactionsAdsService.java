@@ -17,9 +17,13 @@ public class TransactionsAdsService {
     @Autowired
     private TransactionsAdsRepository transactionsAdsRepository;
 
+    @Autowired
+    private P2PADService p2padService;
+
     @Transactional
-    public ResponseEntity<?> saveTransactions(TransactionAds transactionAds) {
+    public ResponseEntity<?> placeOrderTransactions(TransactionAds transactionAds) {
         try {
+            p2padService.lockCoinP2P(transactionAds);
             LocalDateTime createDt = LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh"));
             transactionAds.setCreatedAt(createDt);
             transactionsAdsRepository.save(transactionAds);

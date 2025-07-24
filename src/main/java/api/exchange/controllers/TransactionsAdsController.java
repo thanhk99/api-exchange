@@ -17,9 +17,9 @@ public class TransactionsAdsController {
     @Autowired
     private TransactionsAdsService transactionsAdsService;
 
-    @PostMapping("/save")
-    public ResponseEntity<?> saveTransactions(@RequestBody TransactionAds transactionAds) {
-        return transactionsAdsService.saveTransactions(transactionAds);
+    @PostMapping("/placeOrder")
+    public ResponseEntity<?> placeOrderTransactions(@RequestBody TransactionAds transactionAds) {
+        return transactionsAdsService.placeOrderTransactions(transactionAds);
     }
 
     @PostMapping("/confirm")

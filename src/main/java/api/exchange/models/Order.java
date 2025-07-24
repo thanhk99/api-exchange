@@ -2,12 +2,8 @@ package api.exchange.models;
 
 import lombok.*;
 import jakarta.persistence.*;
-
-import java.math.BigDecimal;
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.UUID;
-
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.GenericGenerator;
 import org.hibernate.annotations.UpdateTimestamp;

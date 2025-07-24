@@ -49,4 +49,8 @@ public class TransactionAds {
     @CreationTimestamp
     private LocalDateTime createdAt;
 
+    public enum status {
+        PENDING, CANCLE, DONE;
+    }
+
 }
