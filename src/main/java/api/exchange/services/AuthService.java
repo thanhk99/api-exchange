@@ -208,4 +208,17 @@ public class AuthService {
             throw new RuntimeException("Đăng xuất thất bại", e);
         }
     }
+
+    public ResponseEntity<?> isExistEmail(SignupRequest signupRequest) {
+        try {
+            User isExisit = userRepository.findByEmail(signupRequest.getEmail());
+            if (isExisit != null) {
+                return ResponseEntity.ok(Map.of("message", "email đã tồn tại"));
+            } else {
+                return ResponseEntity.ok(Map.of("message", "success"));
+            }
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("message", "SERVER_ERROR"));
+        }
+    }
 }

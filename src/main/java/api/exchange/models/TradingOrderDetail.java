@@ -1,10 +1,6 @@
 package api.exchange.models;
 
 import java.math.BigDecimal;
-import java.util.UUID;
-
-import org.hibernate.annotations.GenericGenerator;
-
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -15,16 +11,15 @@ import lombok.*;
 @AllArgsConstructor
 public class TradingOrderDetail {
     @Id
-    @GeneratedValue(generator = "UUID")
-    @GenericGenerator(name = "UUID", strategy = "org.hibernate.id.UUIDGenerator")
-    private UUID detailId;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long detailId;
 
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "order_id", referencedColumnName = "order_id")
-    private Order order;
+    // @OneToOne(fetch = FetchType.LAZY)
+    // @JoinColumn(name = "order_id", referencedColumnName = "order_id")
+    // private Order order;
 
     @Column(length = 20)
-    private String pair; // e.g., "BTC/USDT"
+    private String pair;
 
     @Column(precision = 24, scale = 8)
     private BigDecimal price;
