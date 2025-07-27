@@ -48,4 +48,4 @@ ENTRYPOINT ["java", \
             "-XX:MaxRAMPercentage=75.0", \
             "-XX:InitialRAMPercentage=50.0", \
             "-XX:MinRAMPercentage=50.0", \
-            "com.yourpackage.MainApplication"]
+            "api.exchange.ExchangeApplication"]
