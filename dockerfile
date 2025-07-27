@@ -6,6 +6,7 @@ WORKDIR /workspace/app
 # Copy các file cấu hình Maven trước để tận dụng Docker cache
 COPY mvnw .
 COPY .mvn .mvn
+RUN chmod +x mvnw
 COPY pom.xml .
 
 # Download dependencies trước (tận dụng cache layer)
