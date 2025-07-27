@@ -15,13 +15,12 @@ import lombok.*;
 @NoArgsConstructor
 public class P2POrderDetail {
     @Id
-    @GeneratedValue(generator = "UUID")
-    @GenericGenerator(name = "UUID", strategy = "org.hibernate.id.UUIDGenerator")
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private UUID detailId;
 
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "order_id")
-    private Order order;
+    // @OneToOne(fetch = FetchType.LAZY)
+    // @JoinColumn(name = "order_id")
+    // private Order order;
 
     @Column(length = 10)
     private String fiatCurrency; // "VND", "USD"

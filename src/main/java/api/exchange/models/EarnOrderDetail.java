@@ -1,10 +1,6 @@
 package api.exchange.models;
 
 import java.math.BigDecimal;
-import java.util.UUID;
-
-import org.hibernate.annotations.GenericGenerator;
-
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -15,13 +11,12 @@ import lombok.*;
 @AllArgsConstructor
 public class EarnOrderDetail {
     @Id
-    @GeneratedValue(generator = "UUID")
-    @GenericGenerator(name = "UUID", strategy = "org.hibernate.id.UUIDGenerator")
-    private UUID detailId;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long detailId;
 
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "order_id")
-    private Order order;
+    // @OneToOne(fetch = FetchType.LAZY)
+    // @JoinColumn(name = "order_id")
+    // private Order order;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "product_id")

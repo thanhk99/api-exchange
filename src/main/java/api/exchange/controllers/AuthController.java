@@ -10,6 +10,8 @@ import api.exchange.dtos.Response.RefreshTokenRequest;
 import api.exchange.models.UserDevice;
 import api.exchange.services.AuthService;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 
 @RestController
 @RequestMapping("api/v1/auth")
@@ -37,6 +39,11 @@ public class AuthController {
     @PostMapping("/logout")
     public ResponseEntity<?> logout(@RequestHeader("Authorization") String authHeader, @RequestBody UserDevice entity) {
         return authService.revokeDevice(authHeader, entity);
+    }
+
+    @PostMapping("/existEmail")
+    public ResponseEntity<?> isExistEmail(@RequestBody SignupRequest signupRequest) {
+        return authService.isExistEmail(signupRequest);
     }
 
 }
