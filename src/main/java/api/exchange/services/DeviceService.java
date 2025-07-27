@@ -1,16 +1,23 @@
 package api.exchange.services;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
 import api.exchange.models.User;
 import api.exchange.models.UserDevice;
 import api.exchange.repository.UserDeviceRepository;
+import api.exchange.repository.UserRepository;
+import api.exchange.sercurity.jwt.JwtUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.transaction.Transactional;
 import ua_parser.Client;
@@ -21,6 +28,12 @@ public class DeviceService {
 
     @Autowired
     private UserDeviceRepository userDeviceRepository;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private JwtUtil jwtUtil;
 
     public UserDevice saveDeviceInfo(User user, HttpServletRequest request) {
         // Tạo deviceId mới nếu chưa có từ client
@@ -103,16 +116,11 @@ public class DeviceService {
     }
 
     @Transactional
-    public void deactivateDevice(HttpServletRequest request, int userId) {
-        String userAgent = request.getHeader("User-Agent");
-        Parser uaParser = new Parser();
-        Client client = uaParser.parse(userAgent);
-        String ipAdress = request.getRemoteAddr();
-        String browserName = client.userAgent.family;
-        userDeviceRepository.findByIpAddressAndBrowserNameAndUser_Uid(ipAdress, browserName, userId)
+    public void deactivateDevice(String deviceId) {
+        userDeviceRepository.findByDeviceId(deviceId)
                 .ifPresent(device -> {
                     device.setActive(false);
-                    device.setLogoutAt(Instant.now()); // Thêm trường logoutAt nếu cần
+                    device.setLogoutAt(Instant.now());
                     userDeviceRepository.save(device);
                 });
     }
@@ -129,4 +137,46 @@ public class DeviceService {
         // Final fallback: nếu không có thì không xử lý (tuỳ logic nghiệp vụ)
         return deviceId;
     }
+
+    public ResponseEntity<?> getListDevice(String authHeader) {
+        try {
+            // Extract and validate token
+            String token = authHeader.substring(7);
+            // Get user information
+            String uid = jwtUtil.getUserIdFromToken(token);
+            User user = userRepository.findByUid(uid);
+            if (user == null) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(Map.of(
+                                "status", "ERROR",
+                                "code", "USER_NOT_FOUND",
+                                "message", "User not found"));
+            }
+
+            List<UserDevice> userDevices = userDeviceRepository.findByUser_UidAndIsActive(uid, true);
+            if (userDevices == null || userDevices.isEmpty()) {
+                return ResponseEntity.ok(Collections.emptyList());
+            }
+
+            List<Map<String, Object>> deviceResponses = new ArrayList<>();
+            for (UserDevice userDevice : userDevices) {
+                Map<String, Object> deviceResponse = buildDeviceResponse(userDevice);
+
+                // Add more fields as needed
+                deviceResponses.add(deviceResponse);
+            }
+
+            return ResponseEntity.ok(Map.of(
+                    "message", "success",
+                    "data", deviceResponses));
+
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of(
+                            "status", "ERROR",
+                            "code", "SERVER_ERROR",
+                            "message", "An unexpected error occurred"));
+        }
+    }
+
 }

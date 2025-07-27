@@ -3,7 +3,6 @@ package api.exchange.models;
 import java.time.Instant;
 
 import jakarta.persistence.*;
-import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -36,9 +35,16 @@ public class UserDevice {
 
     @Column(nullable = false)
     private Instant lastLoginAt;
+
     @Column(nullable = true)
     private Instant LogoutAt;
+
     private String browserName;
+
     @Column(nullable = false)
     private boolean isActive;
+
+    @Column(unique = true, length = 1000)
+    private String token;
+
 }

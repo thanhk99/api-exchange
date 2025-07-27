@@ -18,8 +18,8 @@ public class UserService {
 
     public ResponseEntity<?> getProfileService(String authHeader) {
         String token = authHeader.substring(7);
-        int userId = jwtUtil.getUserIdFromToken(token);
-        User user = userRepository.getByUid(userId);
+        String userId = jwtUtil.getUserIdFromToken(token);
+        User user = userRepository.findByUid(userId);
         return ResponseEntity.ok(
                 new UserInfoResponse(
                         user.getUid(),

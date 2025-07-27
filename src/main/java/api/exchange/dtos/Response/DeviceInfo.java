@@ -14,7 +14,5 @@ public class DeviceInfo {
     private String os; // iOS/Android/Windows...
     private String browser; // Chrome/Safari...
     private String country;
-    private String city;
-    private String timezone;
     private String ipAddress;
 }

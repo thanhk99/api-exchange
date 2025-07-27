@@ -12,7 +12,7 @@ import lombok.Setter;
 @NoArgsConstructor
 @AllArgsConstructor
 public class UserInfoResponse {
-    private long uid;
+    private String uid;
     private String email;
     private String username;
     private String nation;

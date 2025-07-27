@@ -28,14 +28,16 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthenticationFilter jwtFilter)
             throws Exception {
-        http
+        http    
                 .cors(cors -> cors.configurationSource(corsConfigurationSource())) // Sử dụng cấu hình CORS tùy chỉnh
                 .csrf(AbstractHttpConfigurer::disable) // Cách mới để disable CSRF
-                .authorizeHttpRequests(auth -> auth // Sử dụng authorizeHttpRequests thay vì authorizeRequests
+                .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
                                 "/api/v1/auth/login",
                                 "/api/v1/auth/signup",
-                                "/api/v1/auth/refresh")
+                                "/api/v1/auth/refresh",
+                                "api/v1/hisPriceCoin/**",
+                                "/ws/**")
                         .permitAll()
                         .anyRequest().authenticated())
                 .sessionManagement(session -> session

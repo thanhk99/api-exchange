@@ -1,6 +1,6 @@
 package api.exchange.models;
 
-import java.time.Instant;
+import java.time.LocalDateTime;
 
 import jakarta.persistence.*;
 import lombok.*;
@@ -16,7 +16,7 @@ import lombok.*;
 public class refreshToken {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private long id;
+    private int id;
 
     @OneToOne
     @JoinColumn(name = "uid", referencedColumnName = "uid")
@@ -26,5 +26,5 @@ public class refreshToken {
     private String token;
 
     @Column(nullable = false)
-    private Instant expiresAt;
+    private LocalDateTime expiresAt;
 }

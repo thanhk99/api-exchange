@@ -6,12 +6,12 @@ import org.springframework.stereotype.Repository;
 import api.exchange.models.User;
 
 @Repository
-public interface UserRepository extends JpaRepository<User, Long> {
+public interface UserRepository extends JpaRepository<User, String> {
 
     User findByEmail(String email);
 
     boolean existsByEmail(String email);
 
-    User getByUid(int userId);
+    User findByUid(String userId);
 
 }

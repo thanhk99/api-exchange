@@ -1,5 +1,6 @@
 package api.exchange.repository;
 
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -13,6 +14,9 @@ public interface UserDeviceRepository extends JpaRepository<UserDevice, Long> {
 
     Optional<UserDevice> findByDeviceId(String deviceId);
 
-    Optional<UserDevice> findByIpAddressAndBrowserNameAndUser_Uid(String ipAdress, String browserName, int i);
+    Optional<UserDevice> findByIpAddressAndBrowserNameAndUser_UidAndIsActive(String ipAdress, String browserName,
+            String i, boolean isActive);
+
+    List<UserDevice> findByUser_UidAndIsActive(String userId, Boolean isActive);
 
 }
