@@ -15,7 +15,7 @@ RUN ./mvnw dependency:go-offline
 COPY src src
 
 # Build ứng dụng và bỏ qua tests
-RUN ./mvnw clean package -DskipTests
+# RUN ./mvnw clean package -DskipTests
 
 # Tách file JAR thành các thư mục riêng để tối ưu
 RUN mkdir -p target/dependency && (cd target/dependency; jar -xf ../*.jar)
