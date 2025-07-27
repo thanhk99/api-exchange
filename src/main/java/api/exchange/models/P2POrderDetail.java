@@ -1,10 +1,6 @@
 package api.exchange.models;
 
 import java.math.BigDecimal;
-import java.util.UUID;
-
-import org.hibernate.annotations.GenericGenerator;
-
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -16,7 +12,7 @@ import lombok.*;
 public class P2POrderDetail {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private UUID detailId;
+    private Long detailId;
 
     // @OneToOne(fetch = FetchType.LAZY)
     // @JoinColumn(name = "order_id")
