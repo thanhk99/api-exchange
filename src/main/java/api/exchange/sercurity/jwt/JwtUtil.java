@@ -16,10 +16,11 @@ import org.springframework.stereotype.Component;
 
 import api.exchange.models.TokenBlacklist;
 import api.exchange.models.User;
+import api.exchange.models.UserDevice;
 import api.exchange.models.refreshToken;
 import api.exchange.repository.RefreshTokenRepository;
 import api.exchange.repository.TokenBlacklistRepository;
-
+import api.exchange.repository.UserDeviceRepository;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtParser;
@@ -46,6 +47,9 @@ public class JwtUtil {
 
     @Autowired
     private TokenBlacklistRepository tokenBlacklistRepository;
+
+    @Autowired 
+    private UserDeviceRepository userDeviceRepository;
 
     public JwtUtil(@Value("${jwt.secret}") String secret) {
         try {
@@ -85,16 +89,17 @@ public class JwtUtil {
     }
 
     // Tạo refresh token và lưu vào database
-    public refreshToken generateRefreshToken(User user) {
+    public refreshToken generateRefreshToken(User user , String deviceId) {
         // Xóa token cũ nếu tồn tại
         refreshTokenRepository.findByUser(user)
                 .ifPresent(refreshTokenRepository::delete);
-
         LocalDateTime timeNow = LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh"));
         // Tạo token mới
         refreshToken newToken = refreshToken.builder()
                 .user(user)
                 .token(UUID.randomUUID().toString())
+                .deviceId(deviceId)
+                .lastUsedAt(timeNow)
                 .expiresAt(timeNow.plusDays(refreshTokenExpirationDay))
                 .build();
 

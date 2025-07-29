@@ -125,10 +125,11 @@ public class AuthService {
             }
 
             UserDevice device = deviceService.saveDeviceInfo(user, request);
+            String deviceId = device.getDeviceId();
             LocalDateTime lastLogin = LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh"));
             user.setLastLogin(lastLogin);
             String accessToken = jwtUtil.generateAccessToken(user);
-            refreshToken refreshToken = jwtUtil.generateRefreshToken(user);
+            refreshToken refreshToken = jwtUtil.generateRefreshToken(user, deviceId);
             Map<String, Object> deviceRespone = deviceService.buildDeviceResponse(device);
 
             return ResponseEntity.ok(
@@ -160,21 +161,17 @@ public class AuthService {
             }
 
             refreshToken refreshToken = refreshTokenRepository.findByToken(requestRefreshToken);
-            if (refreshToken == null) {
-                new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Refresh token not found");
+            String deviceId = refreshToken.getDeviceId();
+            if (refreshToken.getExpiresAt().isBefore(LocalDateTime.now())) {
+                refreshTokenRepository.delete(refreshToken);
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message","refresh token expried"));
             }
-
-            // if (refreshToken.getExpiresAt().isBefore(Instant.now())) {
-            // refreshTokenRepository.delete(refreshToken);
-            // throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Refresh token
-            // expired");
-            // }
             refreshTokenRepository.delete(refreshToken);
 
             // Tạo token mới
             User user = refreshToken.getUser();
             String newAccessToken = jwtUtil.generateAccessToken(user);
-            refreshToken newRefreshToken = jwtUtil.generateRefreshToken(user);
+            refreshToken newRefreshToken = jwtUtil.generateRefreshToken(user, deviceId);
 
             // Trả về response
             return ResponseEntity.ok(

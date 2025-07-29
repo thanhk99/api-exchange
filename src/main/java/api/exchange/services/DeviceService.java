@@ -1,6 +1,7 @@
 package api.exchange.services;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -15,6 +16,8 @@ import org.springframework.stereotype.Service;
 
 import api.exchange.models.User;
 import api.exchange.models.UserDevice;
+import api.exchange.models.refreshToken;
+import api.exchange.repository.RefreshTokenRepository;
 import api.exchange.repository.UserDeviceRepository;
 import api.exchange.repository.UserRepository;
 import api.exchange.sercurity.jwt.JwtUtil;
@@ -35,6 +38,9 @@ public class DeviceService {
     @Autowired
     private JwtUtil jwtUtil;
 
+    @Autowired
+    private RefreshTokenRepository refreshTokenRepository;
+
     public UserDevice saveDeviceInfo(User user, HttpServletRequest request) {
         // Tạo deviceId mới nếu chưa có từ client
         String userAgent = request.getHeader("User-Agent");
@@ -42,7 +48,7 @@ public class DeviceService {
         Client client = uaParser.parse(userAgent);
         String deviceId = Optional.ofNullable(request.getHeader("Device-Id"))
                 .orElse(UUID.randomUUID().toString());
-
+        LocalDateTime timeNow = LocalDateTime.now();
         UserDevice device = UserDevice.builder()
                 .user(user)
                 .deviceId(deviceId)
@@ -51,7 +57,7 @@ public class DeviceService {
                 .ipAddress(request.getRemoteAddr())
                 .location(extractLocationFromIp(request.getRemoteAddr()))
                 .browserName(client.userAgent.family)
-                .lastLoginAt(Instant.now())
+                .lastLoginAt(timeNow)
                 .isActive(true)
                 .build();
         userDeviceRepository.save(device);
@@ -117,10 +123,11 @@ public class DeviceService {
 
     @Transactional
     public void deactivateDevice(String deviceId) {
+        LocalDateTime timeNow= LocalDateTime.now();
         userDeviceRepository.findByDeviceId(deviceId)
                 .ifPresent(device -> {
                     device.setActive(false);
-                    device.setLogoutAt(Instant.now());
+                    device.setLogoutAt(timeNow);
                     userDeviceRepository.save(device);
                 });
     }
@@ -179,4 +186,24 @@ public class DeviceService {
         }
     }
 
+    @Transactional
+    public ResponseEntity<?> revokeDevice(UserDevice userDevice){
+        try {
+            refreshToken refreshToken= refreshTokenRepository.findByDeviceId(userDevice.getDeviceId());
+            UserDevice userDevice1=userDeviceRepository.findByDeviceId(userDevice.getDeviceId()).orElse(null);
+            if(userDevice1.isActive()){
+                LocalDateTime timeNow = LocalDateTime.now();
+                userDevice1.setActive(false);
+                userDevice1.setLogoutAt(timeNow);
+                userDeviceRepository.save(userDevice1);
+                refreshTokenRepository.delete(refreshToken);
+                return ResponseEntity.ok(Map.of("message", "Revoke device success"));
+            }
+            else{
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message"," Device is already revoked"));
+            }
+        }catch(Exception e){
+            return ResponseEntity.internalServerError().body(Map.of("message", "An unexpected error occurred"));
+        }
+    }
 }
