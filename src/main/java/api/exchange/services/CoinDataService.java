@@ -25,7 +25,7 @@ import lombok.extern.slf4j.Slf4j;
 @Service
 @RequiredArgsConstructor
 @EnableScheduling
-public class coinService {
+public class CoinDataService {
     @Autowired
     private coinRepository coinRepository;
     @Autowired

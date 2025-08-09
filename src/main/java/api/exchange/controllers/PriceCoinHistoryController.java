@@ -10,18 +10,16 @@ import org.springframework.web.bind.annotation.RestController;
 
 import api.exchange.models.coinModel;
 import api.exchange.models.priceHistoryModel;
-import api.exchange.services.coinService;
-import org.springframework.web.bind.annotation.GetMapping;
+import api.exchange.services.CoinDataService;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestParam;
 
 @RestController
 @RequestMapping("/api/v1/hisPriceCoin")
 public class PriceCoinHistoryController {
 
     @Autowired
-    private coinService coinService;
+    private CoinDataService coinService;
 
     @PostMapping("/getList")
     public ResponseEntity<?> getListPrice(@RequestBody coinModel entity) {

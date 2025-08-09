@@ -2,6 +2,7 @@ package api.exchange.dtos.Response;
 
 import java.math.BigDecimal;
 
+import api.exchange.models.P2PAd.TradeType;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -23,5 +24,6 @@ public class UserP2PResponse {
     private String paymentMethod;
     private String asset;
     private String fiatCurrency;
+    private TradeType tradeType;
 
 }

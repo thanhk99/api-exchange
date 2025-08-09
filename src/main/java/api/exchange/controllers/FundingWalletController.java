@@ -21,6 +21,6 @@ public class FundingWalletController {
     @PostMapping("addBalance")
     public ResponseEntity<?> addBalance(@RequestBody FundingWallet fundingWallet,
             @RequestHeader("Authorization") String authHeader) {
-        return fundingWalletService.addBalanceCoin(fundingWallet, authHeader);
+        return fundingWalletService.addBalanceCoin(fundingWallet);
     }
 }

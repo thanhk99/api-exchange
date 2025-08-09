@@ -1,11 +1,7 @@
 package api.exchange.repository;
 
-import org.springframework.data.jdbc.repository.query.Query;
 import org.springframework.data.jpa.repository.JpaRepository;
-
 import api.exchange.models.P2PAdReview;
-import io.lettuce.core.dynamic.annotation.Param;
-
 import java.util.List;
 
 public interface P2PAdReviewRepository extends JpaRepository<P2PAdReview, Long> {

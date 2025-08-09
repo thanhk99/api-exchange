@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import api.exchange.models.P2PAd;
+import api.exchange.models.P2PAd.TradeType;
 import api.exchange.sercurity.jwt.JwtUtil;
 import api.exchange.services.P2PADService;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,40 +28,10 @@ public class P2PADController {
         return p2padService.createAddP2P(p2pAd, authHeader);
     }
 
-    @GetMapping("getList")
-    public ResponseEntity<?> getListP2PAds() {
-        return p2padService.getListP2PAds();
+    @GetMapping("getList/{type}")
+    public ResponseEntity<?> getListP2PAds(@PathVariable TradeType type) {
+        return p2padService.getListP2PAds(type);
     }
-    // Endpoint cho "Người mua xác nhận đã thanh toán".
-    @PostMapping("/{id}/confirm-payment") 
-    public ResponseEntity<?> confirmPayment(
-            @PathVariable("id") Long transactionId,
-            @RequestHeader("Authorization") String authHeader) {
-
-        String token = authHeader.substring(7);
-        String buyerId = jwtUtil.getUserIdFromToken(token);
-
-        return p2padService.confirmPayment(transactionId, buyerId);
-    }
-
-    /**
-     * Endpoint cho "Người bán xác nhận đã nhận tiền" và "Giải phóng coin".
-     *
-     * @param transactionId ID của giao dịch.
-     * @param authHeader    JWT token của người bán.
-     * @return ResponseEntity với trạng thái hoàn tất của giao dịch.
-     */
-    @PostMapping("/{id}/release")
-    public ResponseEntity<?> releaseCoins(
-            @PathVariable("id") Long transactionId,
-            @RequestHeader("Authorization") String authHeader) {
-        
-        String token = authHeader.substring(7);
-        String sellerId = jwtUtil.getUserIdFromToken(token);
-
-        return p2padService.releaseCoins(transactionId, sellerId);
-    }
-
      /**
      * Endpoint để "Mở một tranh chấp (Khiếu nại)".
      * Cả người mua và người bán đều có thể gọi endpoint này.

@@ -11,6 +11,6 @@ import io.lettuce.core.dynamic.annotation.Param;
 public interface TransactionsAdsRepository extends JpaRepository<TransactionAds, Long> {
 
     @Query(value = "SELECT COUNT(*) FROM transactions_ads WHERE " +
-            "(from_user = :userId OR to_user = :userId) AND status = 'COMPLETED'", nativeQuery = true)
+            "(buyer_id = :userId OR seller_id = :userId) AND status = 'COMPLETED'", nativeQuery = true)
     long countCompletedTransactions(@Param("userId") String userId);
 }

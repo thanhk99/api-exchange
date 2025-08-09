@@ -2,7 +2,6 @@ package api.exchange.models;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import org.hibernate.annotations.CreationTimestamp;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -16,14 +15,17 @@ public class TransactionAds {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private long id;
 
-    @Column(name = "from_user")
-    private String fromUser;
+    @Column(name = "buyer_id")
+    private String buyerId;
 
-    @Column(name = "to_user")
-    private String toUser;
+    @Column(name = "seller_id")
+    private String sellerId;
 
     @Column(nullable = false, length = 10)
     private String currency;
+
+    @Column(nullable = false )
+    private String asset;
 
     @Column(name = "coin_amount")
     private BigDecimal coinAmount;
@@ -37,20 +39,28 @@ public class TransactionAds {
     @Column(name = "price", nullable = false)
     private BigDecimal price;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "cancle_by")
     private String cancleBy;
 
     @Column(name = "ads_id", nullable = false)
-    private String adsId;
+    private long adsId;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
-    private String status;
+    private status status;
 
-    @CreationTimestamp
     private LocalDateTime createdAt;
 
+    @Column(name = "complete_at")
+    private LocalDateTime completeAt;
+
     public enum status {
-        PENDING, CANCLE, DONE;
+        PENDING, CANCLELED, DONE;
+    }
+
+    public enum cancleBy{
+        SELLER , BUYER , SYSTEM , ADMIN
     }
 
 }
