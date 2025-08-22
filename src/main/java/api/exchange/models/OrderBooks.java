@@ -37,19 +37,17 @@ public class OrderBooks {
     @Enumerated(EnumType.STRING)
     private OrderStatus status;
 
-    @CreationTimestamp
     private LocalDateTime createdAt;
 
-    @UpdateTimestamp
     private LocalDateTime updatedAt;
 
-    private Long userId;
+    private String uid;
 
     public enum OrderType {
         BUY, SELL
     }
 
     public enum OrderStatus {
-        PENDING, PARTIAL_FILLED, FILLED, CANCELLED
+        PENDING , DONE, CANCELLED
     }
 }
