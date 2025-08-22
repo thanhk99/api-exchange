@@ -27,16 +27,9 @@ public class TransactionsAdsController {
         return transactionsAdsService.releaseCoins(transactionAds.getId());
     }
 
-    // Endpoint cho "Người mua xác nhận đã thanh toán".
-    // @PostMapping("/{id}/confirm-payment") 
-    // public ResponseEntity<?> confirmPayment(
-    //         @PathVariable("id") Long transactionId,
-    //         @RequestHeader("Authorization") String authHeader) {
-
-    //     String token = authHeader.substring(7);
-    //     String buyerId = jwtUtil.getUserIdFromToken(token);
-
-    //     return p2padService.confirmPayment(transactionId, buyerId);
-    // }
+    @PostMapping("/cancle")
+    public ResponseEntity<?> cancleTransBy(@RequestBody TransactionAds transactionAds) {
+        return transactionsAdsService.cancleTransP2PBy(transactionAds.getId(), transactionAds.getCancleBy());
+    }
 
 }

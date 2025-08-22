@@ -39,7 +39,6 @@ public class TransactionAds {
     @Column(name = "price", nullable = false)
     private BigDecimal price;
 
-    @Enumerated(EnumType.STRING)
     @Column(name = "cancle_by")
     private String cancleBy;
 
@@ -56,11 +55,8 @@ public class TransactionAds {
     private LocalDateTime completeAt;
 
     public enum status {
-        PENDING, CANCLELED, DONE;
+        PENDING, CANCLELED, DONE , ALL;
     }
 
-    public enum cancleBy{
-        SELLER , BUYER , SYSTEM , ADMIN
-    }
 
 }

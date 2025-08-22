@@ -24,12 +24,12 @@ public class UserService {
         String token = authHeader.substring(7);
         String userId = jwtUtil.getUserIdFromToken(token);
         User user = userRepository.findByUid(userId);
-        return ResponseEntity.ok(
+        return ResponseEntity.ok(Map.of("message","success","data",
                 new UserInfoResponse(
                         user.getUid(),
                         user.getEmail(),
                         user.getUsername(),
-                        user.getNation()));
+                        user.getNation())));
 
     }
 

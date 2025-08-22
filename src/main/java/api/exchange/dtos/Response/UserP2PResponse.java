@@ -14,8 +14,8 @@ public class UserP2PResponse {
     private Long id;
     private String uid;
     private String name;
-    private Long totalTransfer;
-    private double percentComplete;
+    private BigDecimal totalTransfer;
+    private BigDecimal percentComplete;
     private double percentLike;
     private BigDecimal price;
     private BigDecimal availableAmount;

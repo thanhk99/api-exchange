@@ -1,5 +1,7 @@
 package api.exchange.services;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -8,10 +10,14 @@ import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+
+import api.exchange.dtos.Response.ProfileP2PResponse;
 import api.exchange.dtos.Response.UserP2PResponse;
+import api.exchange.models.FundingWallet;
 import api.exchange.models.P2PAd;
 import api.exchange.models.P2POrderDetail;
 import api.exchange.models.P2PAd.TradeType;
+import api.exchange.repository.FundingWalletRepository;
 import api.exchange.repository.P2PAdRepository;
 import api.exchange.repository.P2POrderDetailRepository;
 import api.exchange.repository.TransactionsAdsRepository;
@@ -36,6 +42,9 @@ public class P2PADService {
     @Autowired
     private P2POrderDetailRepository orderRepository;
 
+    @Autowired 
+    private FundingWalletRepository fundingWalletRepository;
+
     public ResponseEntity<?> createAddP2P(P2PAd p2pAd, String authHeader) {
         try {
             String token = authHeader.substring(7);
@@ -44,9 +53,18 @@ public class P2PADService {
             if (ListP2PAd != null) {
                 for (P2PAd p2pAdInfo : ListP2PAd) {
                     if (p2pAd.getPrice().compareTo(p2pAdInfo.getPrice()) == 0
-                            && p2pAd.getPaymentMethods().equals(p2pAdInfo.getPaymentMethods()) && p2pAd.getTradeType().equals(p2pAdInfo.getTradeType())) {
+                            && p2pAd.getPaymentMethods().equals(p2pAdInfo.getPaymentMethods()) && p2pAd.getTradeType().equals(p2pAdInfo.getTradeType()) && p2pAd.getAsset().equals(p2pAdInfo.getAsset())) {
                         return ResponseEntity.status(409).body(Map.of("message", "Quảng cáo này bị trùng lập"));
                     }
+                }
+            }
+            if (p2pAd.getTradeType().equals(TradeType.SELL)) {
+                FundingWallet sellerWallet = fundingWalletRepository.findByUidAndCurrency(uid, p2pAd.getAsset());
+                if (sellerWallet == null) {
+                    return ResponseEntity.badRequest().body(Map.of("message", "Ví Funding bạn không có loại tiền này "));
+                }
+                if(sellerWallet.getBalance().compareTo(p2pAd.getAvailableAmount()) < 0){
+                    return ResponseEntity.badRequest().body(Map.of("message" , "Số dư trong ví Funding của bạn không đủ "));
                 }
             }
             LocalDateTime createDt = LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh"));
@@ -66,14 +84,15 @@ public class P2PADService {
         List<P2PAd> listP2pAds = p2pAdRepository.findByTradeType(type);
         for (P2PAd p2pAd : listP2pAds) {
             String name = userRepository.findById(p2pAd.getUserId()).get().getUsername();
-            Long totalTransfer = transactionsAdsRepository.countCompletedTransactions((p2pAd.getUserId()));
-
+            BigDecimal totalTransfer = transactionsAdsRepository.countTotalTransactions((p2pAd.getUserId()));
+            BigDecimal doneTransfer = transactionsAdsRepository.countCompletedTransactions(p2pAd.getUserId());
+            BigDecimal percentComplete = doneTransfer.divide(totalTransfer, 4, RoundingMode.HALF_UP).multiply(new BigDecimal(100));
             UserP2PResponse userP2PResponse = new UserP2PResponse(
                     p2pAd.getId(),
                     p2pAd.getUserId(),
                     name,
                     totalTransfer,
-                    0,
+                    percentComplete,
                     0,
                     p2pAd.getPrice(),
                     p2pAd.getAvailableAmount(),
@@ -88,15 +107,6 @@ public class P2PADService {
         return ResponseEntity.ok(Map.of("message", "success", "data", listP2PResponse));
     }
 
-    // public void lockCoinP2P(TransactionAds transactionAds) {
-    //     try {
-    //         FundingWallet fundingWallet =
-    //         fundingWalletRepository.findByUid(transactionAds.getSellerId());
-    //         fundingWallet.setLockedBalance(transactionAds.getCoinAmount());
-    //     } catch (Exception e) {
-    //         System.out.println(e);
-    //     }
-    // }
 
 
 
@@ -145,5 +155,52 @@ public class P2PADService {
         return ResponseEntity.ok(orderRepository.save(transaction));
     }
 
+    public ResponseEntity<?> profileUserP2P(String header){
+        String jwt = header.substring(7);
+        String uid = jwtUtil.getUserIdFromToken(jwt);
+
+        //30 days
+        LocalDateTime endDate= LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh"));
+        LocalDateTime startDate= endDate.minusDays(30);
+        BigDecimal countOrderDone30Days = transactionsAdsRepository.countCompletedTransactions30Days(uid, startDate, endDate);
+        BigDecimal buyOrderDone30Days = transactionsAdsRepository.countCompletedBuyTransactions30Days(uid, startDate, endDate);
+        BigDecimal sellOrderDone30Days = countOrderDone30Days.subtract(buyOrderDone30Days);
+
+        BigDecimal totalTrans30Days = transactionsAdsRepository.countTotalTransactions30Days(uid,startDate,endDate);
+        BigDecimal totalTrans = transactionsAdsRepository.countTotalTransactions(uid);
+
+        BigDecimal percnetTotalDone30Days = countOrderDone30Days.divide(totalTrans30Days, 2, RoundingMode.HALF_UP);
+        BigDecimal percnetBuyDone30Days = buyOrderDone30Days.divide(countOrderDone30Days , 2 ,  RoundingMode.HALF_UP);
+        BigDecimal percnetSellDone30Days = sellOrderDone30Days.divide(countOrderDone30Days,2 , RoundingMode.HALF_UP);
+        
+        BigDecimal totalOrderDone = transactionsAdsRepository.countCompletedTransactions(uid);
+        BigDecimal percnetTotalDone = totalOrderDone.divide(totalTrans , 2 ,RoundingMode.HALF_UP);
+
+        FundingWallet fundingWallet = fundingWalletRepository.findByUid(uid);
+        BigDecimal coinAvaiable = fundingWallet.getBalance();
+        BigDecimal coinLocked = fundingWallet.getLockedBalance();
+
+        return ResponseEntity.ok(Map.of("message","success", "data" , new ProfileP2PResponse(
+            coinAvaiable,
+            coinLocked,
+            countOrderDone30Days,
+            buyOrderDone30Days,
+            sellOrderDone30Days,
+            percnetTotalDone30Days,
+            percnetBuyDone30Days,
+            percnetSellDone30Days,
+            totalOrderDone, 
+            new BigDecimal(0),
+            percnetTotalDone,
+            new BigDecimal(0),
+            new BigDecimal(0),
+            new BigDecimal(0),
+            new BigDecimal(0),
+            new BigDecimal(0),
+            new BigDecimal(0)
+        )));
+
+
+   }
 
 }

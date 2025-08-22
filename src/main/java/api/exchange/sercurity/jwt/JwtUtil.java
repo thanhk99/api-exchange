@@ -16,11 +16,9 @@ import org.springframework.stereotype.Component;
 
 import api.exchange.models.TokenBlacklist;
 import api.exchange.models.User;
-import api.exchange.models.UserDevice;
 import api.exchange.models.refreshToken;
 import api.exchange.repository.RefreshTokenRepository;
 import api.exchange.repository.TokenBlacklistRepository;
-import api.exchange.repository.UserDeviceRepository;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtParser;
@@ -48,8 +46,6 @@ public class JwtUtil {
     @Autowired
     private TokenBlacklistRepository tokenBlacklistRepository;
 
-    @Autowired 
-    private UserDeviceRepository userDeviceRepository;
 
     public JwtUtil(@Value("${jwt.secret}") String secret) {
         try {

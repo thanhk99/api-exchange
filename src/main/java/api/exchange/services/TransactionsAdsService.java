@@ -87,14 +87,14 @@ public class TransactionsAdsService {
     }
 
     @Transactional
-    public ResponseEntity<?> cancleTransP2PBy(Long idTransaction) {
+    public ResponseEntity<?> cancleTransP2PBy(Long idTransaction , String cancleBy) {
         try {
             TransactionAds transactionAds = transactionsAdsRepository.findById(idTransaction).get();
             if(transactionAds == null){
                 return ResponseEntity.badRequest().body(Map.of("message","Giao dịch không tồn tại ."));
             }
             if (transactionAds.getStatus() != TransactionAds.status.PENDING) {
-                return ResponseEntity.badRequest().body(Map.of("message","Giao dịch chưa được người mua xác nhận thanh toán."));
+                return ResponseEntity.badRequest().body(Map.of("message","Giao dịch đã hoàn tất ."));
             }
             FundingWallet sellerWallet= fundingWalletRepository.findByUidAndCurrency(transactionAds.getSellerId(), transactionAds.getAsset());
 
@@ -102,9 +102,13 @@ public class TransactionsAdsService {
             sellerWallet.setLockedBalance(sellerWallet.getLockedBalance().subtract(transactionAds.getCoinAmount()));
             sellerWallet.setBalance(sellerWallet.getBalance().add(transactionAds.getCoinAmount()));
 
-            // Chuyển trạng thái của giao dịch 
+            // Chuyển trạng thái huỷ giao dịch 
             transactionAds.setStatus(status.CANCLELED);
+            transactionAds.setCompleteAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
+            transactionAds.setCancleBy(cancleBy);
 
+            // save
+            transactionsAdsRepository.save(transactionAds);
             return ResponseEntity.ok(Map.of("message", "Cancle Success"));
         } catch (Exception e) {
             System.out.println(e);

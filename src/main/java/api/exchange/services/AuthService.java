@@ -132,13 +132,13 @@ public class AuthService {
             refreshToken refreshToken = jwtUtil.generateRefreshToken(user, deviceId);
             Map<String, Object> deviceRespone = deviceService.buildDeviceResponse(device);
 
-            return ResponseEntity.ok(
+            return ResponseEntity.ok( Map.of("message","success","data",
                     new AuthResponse(
                             accessToken,
                             refreshToken.getToken(),
                             user.getUid(),
                             user.getEmail(),
-                            deviceRespone));
+                            deviceRespone)));
 
         } catch (BadCredentialsException e) {
             return ResponseEntity
@@ -185,7 +185,7 @@ public class AuthService {
         } catch (ResponseStatusException e) {
             throw e; // Re-throw các lỗi đã được định nghĩa
         } catch (Exception e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to refresh token");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message","refresh token expried"));
         }
     }
 

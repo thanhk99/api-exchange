@@ -14,6 +14,8 @@ import api.exchange.sercurity.jwt.JwtUtil;
 import api.exchange.services.P2PADService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
+
 
 @RestController
 @RequestMapping("/api/v1/p2pads")
@@ -51,5 +53,10 @@ public class P2PADController {
         return p2padService.openDispute(transactionId, userId);
     }
 
+    @GetMapping("/profile")
+    public ResponseEntity<?>  getProfileP2P(@RequestHeader("Authorization") String header) {
+        return p2padService.profileUserP2P(header);
+    }
+    
 
 }
