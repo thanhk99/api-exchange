@@ -37,11 +37,19 @@ public class OrderBooks {
     @Enumerated(EnumType.STRING)
     private OrderStatus status;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "trade_type", nullable = false)
+    private TradeType tradeType;
+
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;
 
     private String uid;
+
+    // For LIMIT orders only
+    @Column(name = "limit_price", precision = 18, scale = 8)
+    private BigDecimal limitPrice;
 
     public enum OrderType {
         BUY, SELL
@@ -49,5 +57,25 @@ public class OrderBooks {
 
     public enum OrderStatus {
         PENDING, DONE, CANCELLED
+    }
+
+    public enum TradeType {
+        LIMIT, MARKET
+    }
+
+    public boolean isBuyOrder() {
+        return orderType == OrderType.BUY;
+    }
+
+    public boolean isSellOrder() {
+        return orderType == OrderType.SELL;
+    }
+
+    public boolean isLimitOrder() {
+        return tradeType == TradeType.LIMIT;
+    }
+
+    public boolean isMarketOrder() {
+        return tradeType == TradeType.MARKET;
     }
 }
