@@ -29,7 +29,7 @@ public class OrderBooks {
     @Column(nullable = false, precision = 18, scale = 8)
     private BigDecimal quantity;
 
-    @Column(nullable = false, length = 10)
+    @Column(name = "order_type", nullable = false, length = 10)
     @Enumerated(EnumType.STRING)
     private OrderType orderType;
 
@@ -48,6 +48,6 @@ public class OrderBooks {
     }
 
     public enum OrderStatus {
-        PENDING , DONE, CANCELLED
+        PENDING, DONE, CANCELLED
     }
 }
