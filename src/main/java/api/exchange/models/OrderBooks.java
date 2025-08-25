@@ -29,7 +29,7 @@ public class OrderBooks {
     @Column(nullable = false, precision = 18, scale = 8)
     private BigDecimal quantity;
 
-    @Column(nullable = false, length = 10)
+    @Column(name = "order_type", nullable = false, length = 10)
     @Enumerated(EnumType.STRING)
     private OrderType orderType;
 
@@ -37,19 +37,17 @@ public class OrderBooks {
     @Enumerated(EnumType.STRING)
     private OrderStatus status;
 
-    @CreationTimestamp
     private LocalDateTime createdAt;
 
-    @UpdateTimestamp
     private LocalDateTime updatedAt;
 
-    private Long userId;
+    private String uid;
 
     public enum OrderType {
         BUY, SELL
     }
 
     public enum OrderStatus {
-        PENDING, PARTIAL_FILLED, FILLED, CANCELLED
+        PENDING, DONE, CANCELLED
     }
 }
