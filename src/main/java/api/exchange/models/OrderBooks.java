@@ -23,7 +23,7 @@ public class OrderBooks {
     @Column(nullable = false, length = 20)
     private String symbol;
 
-    @Column(nullable = false, precision = 18, scale = 8)
+    @Column(precision = 18, scale = 8)
     private BigDecimal price;
 
     @Column(nullable = false, precision = 18, scale = 8)
@@ -46,10 +46,6 @@ public class OrderBooks {
     private LocalDateTime updatedAt;
 
     private String uid;
-
-    // For LIMIT orders only
-    @Column(name = "limit_price", precision = 18, scale = 8)
-    private BigDecimal limitPrice;
 
     public enum OrderType {
         BUY, SELL

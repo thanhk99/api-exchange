@@ -3,7 +3,6 @@ package api.exchange.services;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Map;
-import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
@@ -32,7 +31,16 @@ public class SpotService {
         String jwt = header.substring(7);
         String uid = jwtUtil.getUserIdFromToken(jwt);
 
+        OrderBooks orderBooks = orderBooksRepository.findByUidAndSymbolAndPriceAndStatusAndOrderTypeAndTradeType(uid,
+                entity.getSymbol(),
+                entity.getPrice(), OrderStatus.PENDING, entity.getOrderType(), entity.getTradeType());
         LocalDateTime createAt = LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh"));
+
+        if (orderBooks != null) {
+            orderBooks.setQuantity(orderBooks.getQuantity().add(entity.getQuantity()));
+            orderBooks.setUpdatedAt(createAt);
+            return ResponseEntity.ok(Map.of("message", "success", "data", "Cập nhật lệnh"));
+        }
 
         entity.setStatus(OrderStatus.PENDING);
         entity.setUid(uid);
