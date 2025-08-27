@@ -1,7 +1,6 @@
 package api.exchange.dtos.Requset;
 
 import java.time.LocalDate;
-import api.exchange.models.TransactionAds.status;
 import lombok.*;
 
 @Data

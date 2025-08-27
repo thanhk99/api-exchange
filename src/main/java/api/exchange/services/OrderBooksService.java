@@ -10,9 +10,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import api.exchange.models.FundingWallet;
 import api.exchange.models.OrderBooks;
 import api.exchange.models.OrderBooks.OrderStatus;
 import api.exchange.models.SpotHistory.TradeType;
+import api.exchange.repository.FundingWalletRepository;
 import api.exchange.repository.OrderBooksRepository;
 import lombok.extern.slf4j.Slf4j;
 
@@ -21,11 +23,20 @@ import lombok.extern.slf4j.Slf4j;
 public class OrderBooksService {
 
     @Autowired
+    private FundingWalletService fundingWalletService;
+
+    @Autowired
     private OrderBooksRepository orderBooksRepository;
 
     @Autowired
-    SpotHistoryService spotHistoryService;
+    private SpotHistoryService spotHistoryService;
 
+    @Autowired
+    private FundingWalletRepository fundingWalletRepository;
+
+    OrderBooksService(FundingWalletService fundingWalletService) {
+        this.fundingWalletService = fundingWalletService;
+    }
     @Transactional
     public void matchOrders(String symbol) {
         log.debug("🔍 Starting matching for symbol: {}", symbol);
@@ -283,6 +294,9 @@ public class OrderBooksService {
         // Update order quantities
         BigDecimal newQuantity1 = buyOrder.getQuantity().subtract(quantity);
         BigDecimal newQuantity2 = sellOrder.getQuantity().subtract(quantity);
+        String buyerUid = orderBooksRepository.findById(buyOrder.getId()).get().getUid();
+        String sellerUid = orderBooksRepository.findById(sellOrder.getId()).get().getUid();
+
         LocalDateTime update_at = LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh"));
 
         // Update buyOrder - CHỈ set DONE khi quantity = 0
@@ -303,6 +317,8 @@ public class OrderBooksService {
         orderBooksRepository.save(buyOrder);
         orderBooksRepository.save(sellOrder);
 
+        fundingWalletService.executeTradeSpot(sellerUid,buyerUid,price,quantity,tradeType,buyOrder.getSymbol());
+
         spotHistoryService.createSpotRecord(
                 buyOrder.getSymbol(),
                 price,
@@ -320,9 +336,11 @@ public class OrderBooksService {
     }
 
     // Helper method to get last traded price (cần implement thực tế)
-    private BigDecimal getLastTradedPrice(String symbol) {
+    public BigDecimal getLastTradedPrice(String symbol) {
         // Trong thực tế, lấy từ database hoặc cache
         // Tạm thời return giá mặc định
-        return BigDecimal.valueOf(1000); // Example price
+        return BigDecimal.valueOf(100); // Example price
     }
+
+
 }
