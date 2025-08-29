@@ -317,7 +317,7 @@ public class OrderBooksService {
         orderBooksRepository.save(buyOrder);
         orderBooksRepository.save(sellOrder);
 
-        fundingWalletService.executeTradeSpot(sellerUid,buyerUid,price,quantity,tradeType,buyOrder.getSymbol());
+        fundingWalletService.executeTradeSpot(sellerUid,buyerUid,price,quantity,tradeType,buyOrder.getSymbol(),buyOrder.getPrice());
 
         spotHistoryService.createSpotRecord(
                 buyOrder.getSymbol(),

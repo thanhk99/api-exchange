@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
+import api.exchange.dtos.Response.UserFullInfoResponse;
 import api.exchange.dtos.Response.UserInfoResponse;
 import api.exchange.models.User;
 import api.exchange.repository.UserRepository;
@@ -14,7 +15,7 @@ import jakarta.transaction.Transactional;
 
 @Service
 public class UserService {
-    @Autowired
+    @Autowired  
     private UserRepository userRepository;
 
     @Autowired
@@ -49,5 +50,21 @@ public class UserService {
             System.out.println(e);
             return ResponseEntity.internalServerError().body(Map.of("message", "ERROR_SERVER"));
         }
+    }
+
+    public ResponseEntity<?> getAllinfo(String header){
+        String token = header.substring(7);
+        String userId = jwtUtil.getUserIdFromToken(token);
+        User user = userRepository.findByUid(userId);
+        return ResponseEntity.ok(Map.of("message","success","data",new UserFullInfoResponse(
+            user.getUid(),
+            user.getEmail(),
+            user.getUsername(),
+            user.isVerified(),
+            user.getNation(),
+            user.isActive(),
+            "0787107821",
+            "Nguời dùng thông thường "
+        )));
     }
 }

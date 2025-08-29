@@ -10,6 +10,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import api.exchange.models.FundingWallet;
 import api.exchange.services.FundingWalletService;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+
 
 @RestController
 @RequestMapping("api/v1/funding")
@@ -23,4 +26,15 @@ public class FundingWalletController {
             @RequestHeader("Authorization") String authHeader) {
         return fundingWalletService.addBalanceCoin(fundingWallet);
     }
+
+    @GetMapping("getWallet")
+    public ResponseEntity<?> getWallet(@RequestHeader("Authorization") String authHeader) {
+        return fundingWalletService.getWalletFunding(authHeader);
+    }
+
+    @GetMapping("total")
+    public ResponseEntity<?> getTotalMoney( @RequestHeader("Authorization") String authHeader) {
+        return fundingWalletService.getTotalMoney(authHeader);
+    }
+    
 }
