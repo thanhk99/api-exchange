@@ -196,7 +196,7 @@ public class DeviceService {
                 userDevice1.setLogoutAt(timeNow);
                 userDeviceRepository.save(userDevice1);
                 refreshTokenRepository.delete(refreshToken);
-                return ResponseEntity.ok(Map.of("message", "Revoke device success"));
+                                return ResponseEntity.ok(Map.of("message", "success","data","Revoke device success"));
             }
             else{
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message"," Device is already revoked"));
