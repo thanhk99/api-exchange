@@ -1,28 +1,41 @@
-// package api.exchange.config;
+package api.exchange.config;
 
-// import api.exchange.services.BinanceWebSocketClient;
-// import org.springframework.beans.factory.annotation.Autowired;
-// import org.springframework.beans.factory.annotation.Value;
-// import org.springframework.context.annotation.Bean;
-// import org.springframework.context.annotation.Configuration;
-// import org.springframework.messaging.simp.SimpMessagingTemplate;
-// import java.net.URI;
+import api.exchange.websocket.SpotWebSocketClient;
 
-// @Configuration
-// public class WebSocketInitializer {
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 
-// @Autowired
-// private SimpMessagingTemplate messagingTemplate;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
-// @Value("${binance.api.urlSocket}")
-// private String WebsocketUrl;
+import java.net.URI;
 
-// @Bean
-// public BinanceWebSocketClient binanceWebSocketClient() {
-// BinanceWebSocketClient client = new BinanceWebSocketClient(
-// URI.create(WebsocketUrl),
-// messagingTemplate);
-// client.connect();
-// return client;
-// }
-// }
+@Configuration
+public class WebSocketInitializer {
+
+    @Autowired
+    private ObjectMapper objectMapper;
+
+    @Autowired
+    private SimpMessagingTemplate messagingTemplate;
+
+    @Value("${binance.api.urlSocket}")
+    private String WebsocketUrl;
+
+    @Bean
+    public SpotWebSocketClient spotWebSocketClient() {
+        try {
+                SpotWebSocketClient client = new SpotWebSocketClient(
+                    URI.create(WebsocketUrl), 
+                    messagingTemplate, 
+                    objectMapper
+                );
+                client.connect();
+                return client;
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to create WebSocket client", e);
+            }
+        }
+}
