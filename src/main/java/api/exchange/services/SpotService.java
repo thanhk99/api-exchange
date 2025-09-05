@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Map;
+import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
@@ -70,12 +71,11 @@ public class SpotService {
 
     @Transactional
     public ResponseEntity<?> cancleOrder(Long orderId) {
-        OrderBooks orderBooks = orderBooksRepository.findById(orderId).get();
-
-        if (orderBooks == null) {
+        Optional<OrderBooks> orderBooks = orderBooksRepository.findById(orderId);
+        if(!orderBooks.isPresent()){
             return ResponseEntity.badRequest().body(Map.of("message", "Bad Request", "data", "Không tìm thấy id"));
         }
-        if (orderBooks.getStatus() == OrderStatus.PENDING) {
+        if (orderBooks.get().getStatus() == OrderStatus.PENDING) {
             return ResponseEntity.ok(Map.of("message", "success", "data", "Huỷ lệnh thành công"));
         }
         return ResponseEntity.badRequest().body(Map.of("message", "Bad Request", "data", "Không thể huỷ lệnh "));

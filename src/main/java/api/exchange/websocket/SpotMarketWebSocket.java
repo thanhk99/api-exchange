@@ -9,21 +9,19 @@ import com.fasterxml.jackson.databind.JsonNode;
 import java.math.BigDecimal;
 import java.net.URI;
 
-public class SpotWebSocketClient extends WebSocketClient {
+public class SpotMarketWebSocket extends WebSocketClient {
 
     private final SimpMessagingTemplate messagingTemplate;
     private final ObjectMapper objectMapper;
 
-    public SpotWebSocketClient(URI uri, SimpMessagingTemplate messagingTemplate, ObjectMapper objectMapper) {
+    public SpotMarketWebSocket(URI uri, SimpMessagingTemplate messagingTemplate, ObjectMapper objectMapper) {
         super(uri);
         this.messagingTemplate = messagingTemplate;
         this.objectMapper = objectMapper;
     }
 
     @Override
-    public void onOpen(ServerHandshake handshake) {
-        System.out.println("✅ Connected to Binance WebSocket");
-        
+    public void onOpen(ServerHandshake handshake) {        
         this.send("""
         {
             "method": "SUBSCRIBE",

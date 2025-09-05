@@ -1,6 +1,7 @@
 package api.exchange.config;
 
-import api.exchange.websocket.SpotWebSocketClient;
+import api.exchange.websocket.SpotMarketWebSocket;
+import api.exchange.websocket.SpotPriceCoinSocket;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,9 +26,9 @@ public class WebSocketInitializer {
     private String WebsocketUrl;
 
     @Bean
-    public SpotWebSocketClient spotWebSocketClient() {
+    public SpotMarketWebSocket SpotMarketWebSocket() {
         try {
-                SpotWebSocketClient client = new SpotWebSocketClient(
+                SpotMarketWebSocket client = new SpotMarketWebSocket(
                     URI.create(WebsocketUrl), 
                     messagingTemplate, 
                     objectMapper
@@ -37,5 +38,20 @@ public class WebSocketInitializer {
             } catch (Exception e) {
                 throw new RuntimeException("Failed to create WebSocket client", e);
             }
-        }
+    }
+
+    @Bean
+    public SpotPriceCoinSocket SpotPriceCoinSocket() {
+        try {
+                SpotPriceCoinSocket client = new SpotPriceCoinSocket(
+                    URI.create(WebsocketUrl), 
+                    messagingTemplate, 
+                    objectMapper
+                );
+                client.connect();
+                return client;
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to create WebSocket client", e);
+            }
+    }
 }
