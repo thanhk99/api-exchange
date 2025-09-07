@@ -1,246 +1,366 @@
 package api.exchange.services;
 
-import java.math.BigDecimal;
-import java.time.*;
-import java.util.*;
-
-import org.springframework.beans.factory.annotation.*;
-import org.springframework.cache.annotation.Cacheable;
-import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.http.*;
+import api.exchange.dtos.Response.KlinesSpotResponse;
+import api.exchange.models.SpotKlineData1m;
+import api.exchange.models.SpotKlineData1h;
+import api.exchange.models.coinModel;
+import api.exchange.models.priceHistoryModel;
+import api.exchange.repository.SpotKlineData1mRepository;
+import api.exchange.repository.SpotKlineData1hRepository;
+import api.exchange.repository.coinRepository;
+import api.exchange.repository.priceHistoryRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.ResponseEntity;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
-import api.exchange.models.coinModel;
-import api.exchange.models.priceHistoryModel;
-import api.exchange.repository.coinRepository;
-import api.exchange.repository.priceHistoryRepository;
-import jakarta.annotation.PostConstruct;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
-@Slf4j
+/**
+ * Service để lấy dữ liệu coin từ Binance API
+ */
 @Service
-@RequiredArgsConstructor
 @EnableScheduling
 public class CoinDataService {
+
+    @Autowired
+    private RestTemplate restTemplate;
+
+    @Autowired
+    private ObjectMapper objectMapper;
+
+    @Autowired
+    private SpotKlineData1mRepository spotKlineData1mRepository;
+
+    @Autowired
+    private SpotKlineData1hRepository spotKlineData1hRepository;
+
     @Autowired
     private coinRepository coinRepository;
+
     @Autowired
     private priceHistoryRepository priceHistoryRepository;
-    private final RestTemplate restTemplate;
 
-    private static final List<String> TRACKED_SYMBOLS = List.of("BTC", "ETH", "BNB");
-    private static final String BINANCE_API_URL = "https://api.binance.com/api/v3";
-    private static final String API_RATE_COIN_FIAT = "https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=usd,vnd";
+    @Value("${binance.api.url}")
+    private String binanceApiUrl;
 
-    // @PostConstruct
-    public void fetchInitialData() {
-        log.info("Starting initial data fetch for {} coins", TRACKED_SYMBOLS.size());
+    // Các symbols được theo dõi
+    private static final List<String> SYMBOLS = Arrays.asList("BTCUSDT", "ETHUSDT", "SOLUSDT");
 
-        TRACKED_SYMBOLS.forEach(symbol -> {
-            try {
-                // Lấy thông tin cơ bản của coin
-                fetchAndSaveCoinInfo(symbol);
-
-                // Lấy lịch sử giá 24h với khung 5 phút
-                fetchAndSavePriceHistory(symbol, "5m", 288);
-
-                log.info("Completed initial data fetch for {}", symbol);
-            } catch (Exception e) {
-                log.error("Failed to fetch initial data for {}: {}", symbol, e.getMessage());
-                throw new RuntimeException("Initial data fetch failed for " + symbol, e);
-            }
-        });
-    }
-
-    private void fetchAndSaveCoinInfo(String symbol) {
-
-        String url = BINANCE_API_URL + "/ticker/24hr?symbol=" + symbol + "USDT";
-
+    /**
+     * Lấy dữ liệu kline từ Binance API
+     */
+    public List<KlinesSpotResponse> fetchKlineDataFromBinance(String symbol, String interval, int limit) {
         try {
-            ResponseEntity<Map> response = restTemplate.exchange(
-                    url,
-                    HttpMethod.GET,
-                    null,
-                    Map.class);
+            String url = String.format("%s/klines?symbol=%s&interval=%s&limit=%d",
+                    binanceApiUrl, symbol, interval, limit);
 
-            if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
-                throw new RuntimeException("Invalid API response for symbol: " + symbol);
+            ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
+
+            if (response.getStatusCode().is2xxSuccessful()) {
+                JsonNode jsonNode = objectMapper.readTree(response.getBody());
+                return parseBinanceKlineData(jsonNode, symbol, interval);
             }
-
-            Map<String, Object> apiData = response.getBody();
-            coinModel coin = new coinModel();
-            coin.setId(symbol);
-            coin.setName((String) apiData.get("symbol"));
-            coin.setCurrentPrice(new BigDecimal(apiData.get("lastPrice").toString()));
-            coin.setPriceChange24h(new BigDecimal(apiData.get("priceChangePercent").toString()));
-            coin.setLastUpdated(LocalDateTime.now());
-
-            coinRepository.save(coin);
-            log.debug("Saved coin info for {}", symbol);
-
         } catch (Exception e) {
-            log.error("Error fetching coin info for {}: {}", symbol, e.getMessage());
-            throw new RuntimeException("Coin info fetch failed", e);
+            System.err.println("❌ Error fetching kline data from Binance for " + symbol + " " + interval + ": "
+                    + e.getMessage());
         }
+
+        return new ArrayList<>();
     }
 
-    private void fetchAndSavePriceHistory(String symbol, String interval, int limit) {
+    /**
+     * Parse dữ liệu kline từ Binance response
+     */
+    private List<KlinesSpotResponse> parseBinanceKlineData(JsonNode jsonNode, String symbol, String interval) {
+        List<KlinesSpotResponse> klines = new ArrayList<>();
 
-        priceHistoryModel obj = priceHistoryRepository.findFirstBySymbolOrderByIdDesc(symbol);
-        LocalDateTime lastUpdate = null;
-        if (obj != null) {
-            lastUpdate = obj.getTimestamp();
-        }
-
-        String url = String.format(
-                "%s/klines?symbol=%sUSDT&interval=%s&limit=%d",
-                BINANCE_API_URL,
-                symbol,
-                interval,
-                limit);
-        // Nếu có lastUpdate, thêm tham số startTime để lấy dữ liệu mới
-        if (lastUpdate != null) {
-            long startTime = lastUpdate.atZone(ZoneId.systemDefault())
-                    .toInstant().toEpochMilli();
-            long endTime = System.currentTimeMillis();
-            long newLimit = (endTime - startTime) / 300000;
-            System.out.println(startTime + ":" + endTime + ":" + newLimit);
-            url = String.format(
-                    "%s/klines?symbol=%sUSDT&startTime=%d&interval=%s&limit=%d",
-                    BINANCE_API_URL,
-                    symbol,
-                    startTime,
-                    interval,
-                    newLimit);
-
-        }
-
-        try {
-            ResponseEntity<List<List<Object>>> response = restTemplate.exchange(
-                    url,
-                    HttpMethod.GET,
-                    null,
-                    new ParameterizedTypeReference<List<List<Object>>>() {
-                    });
-
-            if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
-                throw new RuntimeException("Invalid API response for price history");
-            }
-
-            List<List<Object>> klines = response.getBody();
-            List<priceHistoryModel> histories = new ArrayList<>();
-
-            for (List<Object> kline : klines) {
-                LocalDateTime timestamp = Instant.ofEpochMilli(Long.parseLong(kline.get(0).toString()))
-                        .atZone(ZoneId.systemDefault())
-                        .toLocalDateTime();
-
-                // Bỏ qua nếu timestamp không mới hơn lastUpdate
-                if (lastUpdate != null && !timestamp.isAfter(lastUpdate)) {
-                    continue;
-                }
-                priceHistoryModel history = new priceHistoryModel();
-                history.setSymbol(symbol);
-                history.setOpenPrice(new BigDecimal(kline.get(1).toString()));
-                history.setHighPrice(new BigDecimal(kline.get(2).toString()));
-                history.setLowPrice(new BigDecimal(kline.get(3).toString()));
-                history.setClosePrice(new BigDecimal(kline.get(4).toString()));
-                history.setVolume(new BigDecimal(kline.get(5).toString()));
-                history.setIntervalType(interval);
-                history.setTimestamp(
-                        Instant.ofEpochMilli(Long.parseLong(kline.get(0).toString()))
-                                .atZone(ZoneId.systemDefault())
-                                .toLocalDateTime());
-                histories.add(history);
-            }
-
-            if (!histories.isEmpty()) {
-                priceHistoryRepository.saveAll(histories);
-                // Cập nhật lastUpdateTimestamps với thời gian mới nhất
-                log.info("Saved {} new price records for {}", histories.size(), symbol);
-            } else {
-                log.debug("No new price records for {}", symbol);
-            }
-
-        } catch (Exception e) {
-            log.error("Error fetching price history for {}: {}", symbol, e.getMessage());
-            throw new RuntimeException("Price history fetch failed", e);
-        }
-    }
-
-    // Hàm cập nhật lịch sử giá BTC mỗi 10 giây
-    // @Scheduled(fixedRate = 10000)
-    public void updateBtcCoinInfo() {
-        TRACKED_SYMBOLS.forEach(symbol -> {
+        for (JsonNode klineNode : jsonNode) {
             try {
-                log.debug("Starting scheduled coin info update for {}", symbol);
-                fetchAndSaveCoinInfo(symbol);
-                log.debug("Completed scheduled coin info update for {}", symbol);
-            } catch (Exception e) {
-                log.error("Scheduled coin info update failed for {}: {}", symbol, e.getMessage());
-            }
-        });
-    }
+                long openTime = klineNode.get(0).asLong();
+                BigDecimal openPrice = new BigDecimal(klineNode.get(1).asText());
+                BigDecimal highPrice = new BigDecimal(klineNode.get(2).asText());
+                BigDecimal lowPrice = new BigDecimal(klineNode.get(3).asText());
+                BigDecimal closePrice = new BigDecimal(klineNode.get(4).asText());
+                BigDecimal volume = new BigDecimal(klineNode.get(5).asText());
+                long closeTime = klineNode.get(6).asLong();
 
-    // @Scheduled(cron = "0 0/5 * * * *")
-    public void updatePriceHistory() {
-        TRACKED_SYMBOLS.forEach(symbol -> {
-            try {
-                String url = String.format(
-                        "%s/klines?symbol=%sUSDT&interval=%s&limit=%d",
-                        BINANCE_API_URL,
+                // Kiểm tra xem nến đã đóng chưa (close time đã qua thời điểm hiện tại chưa)
+                boolean isClosed = System.currentTimeMillis() > closeTime;
+
+                KlinesSpotResponse kline = new KlinesSpotResponse(
                         symbol,
-                        "5m",
-                        1);
-                ResponseEntity<List<List<Object>>> response = restTemplate.exchange(
-                        url,
-                        HttpMethod.GET,
-                        null,
-                        new ParameterizedTypeReference<List<List<Object>>>() {
-                        });
+                        openPrice,
+                        closePrice,
+                        highPrice,
+                        lowPrice,
+                        volume,
+                        openTime,
+                        closeTime,
+                        interval,
+                        isClosed);
 
-                if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
-                    throw new RuntimeException("Invalid API response for price history");
-                }
-
-                List<List<Object>> klines = response.getBody();
-                List<priceHistoryModel> histories = new ArrayList<>();
-
-                for (List<Object> kline : klines) {
-                    priceHistoryModel history = new priceHistoryModel();
-                    history.setSymbol(symbol);
-                    history.setOpenPrice(new BigDecimal(kline.get(1).toString()));
-                    history.setHighPrice(new BigDecimal(kline.get(2).toString()));
-                    history.setLowPrice(new BigDecimal(kline.get(3).toString()));
-                    history.setClosePrice(new BigDecimal(kline.get(4).toString()));
-                    history.setVolume(new BigDecimal(kline.get(5).toString()));
-                    history.setIntervalType("5m");
-                    history.setTimestamp(
-                            Instant.ofEpochMilli(Long.parseLong(kline.get(0).toString()))
-                                    .atZone(ZoneId.systemDefault())
-                                    .toLocalDateTime());
-                    histories.add(history);
-                }
-
-                if (!histories.isEmpty()) {
-                    priceHistoryRepository.saveAll(histories);
-                    // Cập nhật lastUpdateTimestamps với thời gian mới nhất
-                    log.info("Saved {} new price records for {}", histories.size(), symbol);
-                } else {
-                    log.debug("No new price records for {}", symbol);
-                }
+                klines.add(kline);
             } catch (Exception e) {
-
+                System.err.println("❌ Error parsing kline data: " + e.getMessage());
             }
-        });
+        }
+
+        return klines;
     }
 
-    @Cacheable(value = "hisPriceCoin", key = "#entity.name", unless = "#result == null")
+    /**
+     * Lưu dữ liệu kline 1m vào database
+     */
+    public void saveKlineData1m(List<KlinesSpotResponse> klines) {
+        for (KlinesSpotResponse kline : klines) {
+            try {
+                SpotKlineData1m spotKlineData = convertToSpotKlineData1m(kline);
+
+                // Kiểm tra xem nến đã tồn tại chưa
+                SpotKlineData1m existing = spotKlineData1mRepository.findBySymbolAndStartTime(
+                        spotKlineData.getSymbol(), spotKlineData.getStartTime());
+
+                if (existing == null) {
+                    spotKlineData1mRepository.save(spotKlineData);
+                } else {
+                    // Cập nhật nến hiện tại nếu có thay đổi
+                    existing.setClosePrice(spotKlineData.getClosePrice());
+                    existing.setHighPrice(spotKlineData.getHighPrice());
+                    existing.setLowPrice(spotKlineData.getLowPrice());
+                    existing.setVolume(spotKlineData.getVolume());
+                    existing.setIsClosed(spotKlineData.getIsClosed());
+                    spotKlineData1mRepository.save(existing);
+                }
+            } catch (Exception e) {
+                System.err.println("❌ Error saving kline 1m data: " + e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Lưu dữ liệu kline 1h vào database
+     */
+    public void saveKlineData1h(List<KlinesSpotResponse> klines) {
+        for (KlinesSpotResponse kline : klines) {
+            try {
+                SpotKlineData1h spotKlineData = convertToSpotKlineData1h(kline);
+
+                // Kiểm tra xem nến đã tồn tại chưa
+                SpotKlineData1h existing = spotKlineData1hRepository.findBySymbolAndStartTime(
+                        spotKlineData.getSymbol(), spotKlineData.getStartTime());
+
+                if (existing == null) {
+                    spotKlineData1hRepository.save(spotKlineData);
+                } else {
+                    // Cập nhật nến hiện tại nếu có thay đổi
+                    existing.setClosePrice(spotKlineData.getClosePrice());
+                    existing.setHighPrice(spotKlineData.getHighPrice());
+                    existing.setLowPrice(spotKlineData.getLowPrice());
+                    existing.setVolume(spotKlineData.getVolume());
+                    existing.setIsClosed(spotKlineData.getIsClosed());
+                    spotKlineData1hRepository.save(existing);
+                }
+            } catch (Exception e) {
+                System.err.println("❌ Error saving kline 1h data: " + e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Chuyển đổi KlinesSpotResponse thành SpotKlineData1m
+     */
+    private SpotKlineData1m convertToSpotKlineData1m(KlinesSpotResponse kline) {
+        LocalDateTime startTime = LocalDateTime.ofInstant(
+                Instant.ofEpochMilli(kline.getStartTime()), ZoneId.systemDefault());
+        LocalDateTime closeTime = LocalDateTime.ofInstant(
+                Instant.ofEpochMilli(kline.getCloseTime()), ZoneId.systemDefault());
+
+        return new SpotKlineData1m(
+                kline.getSymbol(),
+                kline.getOpenPrice(),
+                kline.getClosePrice(),
+                kline.getHighPrice(),
+                kline.getLowPrice(),
+                kline.getVolume(),
+                startTime,
+                closeTime,
+                kline.isClosed());
+    }
+
+    /**
+     * Chuyển đổi KlinesSpotResponse thành SpotKlineData1h
+     */
+    private SpotKlineData1h convertToSpotKlineData1h(KlinesSpotResponse kline) {
+        LocalDateTime startTime = LocalDateTime.ofInstant(
+                Instant.ofEpochMilli(kline.getStartTime()), ZoneId.systemDefault());
+        LocalDateTime closeTime = LocalDateTime.ofInstant(
+                Instant.ofEpochMilli(kline.getCloseTime()), ZoneId.systemDefault());
+
+        return new SpotKlineData1h(
+                kline.getSymbol(),
+                kline.getOpenPrice(),
+                kline.getClosePrice(),
+                kline.getHighPrice(),
+                kline.getLowPrice(),
+                kline.getVolume(),
+                startTime,
+                closeTime,
+                kline.isClosed());
+    }
+
+    /**
+     * Lấy và lưu dữ liệu 1m cho tất cả symbols từ Binance
+     */
+    public void fetchAndSaveAllKlineData1m() {
+        for (String symbol : SYMBOLS) {
+            try {
+                List<KlinesSpotResponse> klines = fetchKlineDataFromBinance(symbol, "1m", 1);
+
+                if (!klines.isEmpty()) {
+                    saveKlineData1m(klines);
+                    System.out.println("✅ Fetched and saved " + klines.size() + " klines 1m for " + symbol);
+                } else {
+                    System.out.println("⚠️ No kline data available for " + symbol + " 1m from Binance");
+                }
+
+                // Thêm delay để tránh rate limit
+                Thread.sleep(100);
+            } catch (Exception e) {
+                System.err.println("❌ Error processing 1m data for " + symbol + ": " + e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Lấy và lưu dữ liệu 1h cho tất cả symbols từ Binance
+     */
+    public void fetchAndSaveAllKlineData1h() {
+        for (String symbol : SYMBOLS) {
+            try {
+                List<KlinesSpotResponse> klines = fetchKlineDataFromBinance(symbol, "1h", 1);
+
+                if (!klines.isEmpty()) {
+                    saveKlineData1h(klines);
+                    System.out.println("✅ Fetched and saved " + klines.size() + " klines 1h for " + symbol);
+                } else {
+                    System.out.println("⚠️ No kline data available for " + symbol + " 1h from Binance");
+                }
+
+                // Thêm delay để tránh rate limit
+                Thread.sleep(100);
+            } catch (Exception e) {
+                System.err.println("❌ Error processing 1h data for " + symbol + ": " + e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Lấy thông tin coin từ Binance API
+     */
+    public void fetchAndSaveCoinInfo(String symbol) {
+        try {
+            String url = String.format("%s/ticker/24hr?symbol=%s", binanceApiUrl, symbol);
+
+            ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
+
+            if (response.getStatusCode().is2xxSuccessful()) {
+                JsonNode jsonNode = objectMapper.readTree(response.getBody());
+
+                coinModel coin = new coinModel();
+                coin.setId(symbol.replace("USDT", ""));
+                coin.setSymbol(symbol);
+
+                coin.setCurrentPrice(new BigDecimal(jsonNode.get("lastPrice").asText()));
+                coin.setPriceChange24h(new BigDecimal(jsonNode.get("priceChangePercent").asText()));
+
+                coin.setLastUpdated(LocalDateTime.now());
+                coinRepository.save(coin);
+
+                System.out.println("✅ Fetched and saved coin info for " + symbol);
+            }
+        } catch (Exception e) {
+            System.err.println("❌ Error fetching coin info for " + symbol + ": " + e.getMessage());
+        }
+    }
+
+    /**
+     * Lấy và lưu thông tin coin cho tất cả symbols
+     */
+    public void fetchAndSaveAllCoinInfo() {
+        for (String symbol : SYMBOLS) {
+            try {
+                fetchAndSaveCoinInfo(symbol);
+
+                // Thêm delay để tránh rate limit
+                Thread.sleep(100);
+            } catch (Exception e) {
+                System.err.println("❌ Error processing coin info for " + symbol + ": " + e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Lấy danh sách symbols được theo dõi
+     */
+    public List<String> getTrackedSymbols() {
+        return new ArrayList<>(SYMBOLS);
+    }
+
+    /**
+     * Lấy lịch sử giá từ database
+     */
     public List<priceHistoryModel> getListHisCoin(coinModel entity) {
-        return priceHistoryRepository.findTop288BySymbolOrderByTimestampDesc(entity.getName());
+        return priceHistoryRepository.findTop288BySymbolOrderByTimestampDesc(entity.getSymbol());
+    }
+
+    /**
+     * Scheduled task để cập nhật thông tin coin mỗi phút
+     */
+    @Scheduled(fixedRate = 60000)
+    public void updateCoinInfo() {
+        fetchAndSaveAllCoinInfo();
+    }
+
+    /**
+     * Scheduled task để cập nhật dữ liệu 1m mỗi phút
+     */
+    @Scheduled(fixedRate = 60000)
+    public void updateKlineData1m() {
+        fetchAndSaveAllKlineData1m();
+    }
+
+    /**
+     * Scheduled task để cập nhật dữ liệu 1h mỗi giờ
+     */
+    @Scheduled(fixedRate = 3600000)
+    public void updateKlineData1h() {
+        fetchAndSaveAllKlineData1h();
+    }
+
+    /**
+     * Lấy dữ liệu kline với interval tùy chỉnh
+     */
+    public List<KlinesSpotResponse> getCustomIntervalKline(String symbol, String interval, int limit) {
+        return fetchKlineDataFromBinance(symbol, interval, limit);
+    }
+
+    /**
+     * Lấy các intervals được hỗ trợ
+     */
+    public List<String> getSupportedIntervals() {
+        return Arrays.asList("1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d", "3d", "1w",
+                "1M");
     }
 }

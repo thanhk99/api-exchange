@@ -2,6 +2,7 @@ package api.exchange.config;
 
 import api.exchange.websocket.SpotMarketWebSocket;
 import api.exchange.websocket.SpotPriceCoinSocket;
+import api.exchange.services.RingBufferService;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -22,36 +23,38 @@ public class WebSocketInitializer {
     @Autowired
     private SimpMessagingTemplate messagingTemplate;
 
+    @Autowired
+    private RingBufferService ringBufferService;
+
     @Value("${binance.api.urlSocket}")
     private String WebsocketUrl;
 
-    @Bean
+    // @Bean
     public SpotMarketWebSocket SpotMarketWebSocket() {
         try {
-                SpotMarketWebSocket client = new SpotMarketWebSocket(
-                    URI.create(WebsocketUrl), 
-                    messagingTemplate, 
-                    objectMapper
-                );
-                client.connect();
-                return client;
-            } catch (Exception e) {
-                throw new RuntimeException("Failed to create WebSocket client", e);
-            }
+            SpotMarketWebSocket client = new SpotMarketWebSocket(
+                    URI.create(WebsocketUrl),
+                    messagingTemplate,
+                    objectMapper);
+            client.connect();
+            return client;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to create WebSocket client", e);
+        }
     }
 
     @Bean
     public SpotPriceCoinSocket SpotPriceCoinSocket() {
         try {
-                SpotPriceCoinSocket client = new SpotPriceCoinSocket(
-                    URI.create(WebsocketUrl), 
-                    messagingTemplate, 
-                    objectMapper
-                );
-                client.connect();
-                return client;
-            } catch (Exception e) {
-                throw new RuntimeException("Failed to create WebSocket client", e);
-            }
+            SpotPriceCoinSocket client = new SpotPriceCoinSocket(
+                    URI.create(WebsocketUrl),
+                    messagingTemplate,
+                    objectMapper,
+                    ringBufferService);
+            client.connect();
+            return client;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to create WebSocket client", e);
+        }
     }
 }

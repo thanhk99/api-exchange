@@ -26,9 +26,6 @@ import org.springframework.cache.annotation.Cacheable;
 @EnableScheduling
 public class P2PCoinService {
 
-        @Value("${coingecko.api.url}")
-        private String coingeckoApiUrl;
-
         @Autowired
         private CryptoPriceRepository cryptoPriceRepository;
 
