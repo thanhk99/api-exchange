@@ -37,6 +37,7 @@ public class OrderBooksService {
     OrderBooksService(FundingWalletService fundingWalletService) {
         this.fundingWalletService = fundingWalletService;
     }
+
     @Transactional
     public void matchOrders(String symbol) {
         log.debug("🔍 Starting matching for symbol: {}", symbol);
@@ -317,7 +318,8 @@ public class OrderBooksService {
         orderBooksRepository.save(buyOrder);
         orderBooksRepository.save(sellOrder);
 
-        fundingWalletService.executeTradeSpot(sellerUid,buyerUid,price,quantity,tradeType,buyOrder.getSymbol(),buyOrder.getPrice());
+        fundingWalletService.executeTradeSpot(sellerUid, buyerUid, price, quantity, tradeType, buyOrder.getSymbol(),
+                buyOrder.getPrice());
 
         spotHistoryService.createSpotRecord(
                 buyOrder.getSymbol(),
@@ -342,5 +344,9 @@ public class OrderBooksService {
         return BigDecimal.valueOf(100); // Example price
     }
 
+    public List<OrderBooks> listOrderBookBuy(String symbol) {
+        List<OrderBooks> listOrderBooks = orderBooksRepository.findActiveOrders(symbol);
+        return listOrderBooks;
+    }
 
 }
