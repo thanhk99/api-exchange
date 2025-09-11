@@ -10,11 +10,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import api.exchange.models.FundingWallet;
 import api.exchange.models.OrderBooks;
 import api.exchange.models.OrderBooks.OrderStatus;
 import api.exchange.models.SpotHistory.TradeType;
-import api.exchange.repository.FundingWalletRepository;
 import api.exchange.repository.OrderBooksRepository;
 import lombok.extern.slf4j.Slf4j;
 
@@ -23,7 +21,7 @@ import lombok.extern.slf4j.Slf4j;
 public class OrderBooksService {
 
     @Autowired
-    private FundingWalletService fundingWalletService;
+    private SpotWalletService spotWalletService;
 
     @Autowired
     private OrderBooksRepository orderBooksRepository;
@@ -31,11 +29,9 @@ public class OrderBooksService {
     @Autowired
     private SpotHistoryService spotHistoryService;
 
-    @Autowired
-    private FundingWalletRepository fundingWalletRepository;
 
-    OrderBooksService(FundingWalletService fundingWalletService) {
-        this.fundingWalletService = fundingWalletService;
+    OrderBooksService(SpotWalletService spotWalletService) {
+        this.spotWalletService = spotWalletService;
     }
 
     @Transactional
@@ -318,7 +314,7 @@ public class OrderBooksService {
         orderBooksRepository.save(buyOrder);
         orderBooksRepository.save(sellOrder);
 
-        fundingWalletService.executeTradeSpot(sellerUid, buyerUid, price, quantity, tradeType, buyOrder.getSymbol(),
+        spotWalletService.executeTradeSpot(sellerUid, buyerUid, price, quantity, tradeType, buyOrder.getSymbol(),
                 buyOrder.getPrice());
 
         spotHistoryService.createSpotRecord(

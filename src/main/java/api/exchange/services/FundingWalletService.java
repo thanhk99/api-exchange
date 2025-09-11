@@ -63,65 +63,6 @@ public class FundingWalletService {
         }
     }
 
-    @Transactional
-    public void executeTradeSpot(String sellerUid, String buyerUid, BigDecimal price, BigDecimal quantity,
-            TradeType tradeType, String symbol, BigDecimal lockedPrice) {
-
-        String[] parts = symbol.split("/");
-        String coin = parts[0];
-        String stableCoin = parts[1];
-
-        BigDecimal totalCost = price.multiply(quantity);
-        BigDecimal lockedCost = lockedPrice.multiply(quantity);
-        BigDecimal excessAmount = lockedCost.subtract(totalCost);
-
-        // Lấy ví với pessimistic lock để tránh race condition
-        FundingWallet fundingBuyerReceive = fundingWalletRepository.findByUidAndCurrency(buyerUid, coin);
-        FundingWallet fundingSellerSend = fundingWalletRepository.findByUidAndCurrency(sellerUid, coin);
-        FundingWallet fundingSellerReceive = fundingWalletRepository.findByUidAndCurrency(sellerUid, stableCoin);
-        FundingWallet fundingBuyerSend = fundingWalletRepository.findByUidAndCurrency(buyerUid, stableCoin);
-
-        // Xử lý theo loại trade
-        switch (tradeType) {
-            case LIMIT_LIMIT:
-                // Trừ từ locked balance
-                fundingBuyerSend.setLockedBalance(fundingBuyerSend.getLockedBalance().subtract(totalCost));
-                fundingSellerSend.setLockedBalance(fundingSellerSend.getLockedBalance().subtract(quantity));
-                if (excessAmount.compareTo(BigDecimal.ZERO) > 0) {
-                    fundingBuyerSend.setBalance(fundingBuyerSend.getBalance().add(excessAmount));
-                }
-                break;
-
-            case MARKET_LIMIT_BUY:
-                // Buyer dùng market (balance), seller dùng limit (locked)
-                fundingBuyerSend.setBalance(fundingBuyerSend.getBalance().subtract(totalCost));
-                fundingSellerSend.setLockedBalance(fundingSellerSend.getLockedBalance().subtract(quantity));
-                break;
-
-            case MARKET_LIMIT_SELL:
-                // Buyer dùng limit (locked), seller dùng market (balance)
-                fundingBuyerSend.setLockedBalance(fundingBuyerSend.getLockedBalance().subtract(totalCost));
-                fundingSellerSend.setBalance(fundingSellerSend.getBalance().subtract(quantity));
-                break;
-
-            case MARKET_MARKET:
-                // Cả hai đều dùng balance
-                fundingBuyerSend.setBalance(fundingBuyerSend.getBalance().subtract(totalCost));
-                fundingSellerSend.setBalance(fundingSellerSend.getBalance().subtract(quantity));
-                break;
-        }
-
-        // Cộng tiền cho người nhận (LUÔN cộng vào balance)
-        fundingBuyerReceive.setBalance(fundingBuyerReceive.getBalance().add(quantity));
-        fundingSellerReceive.setBalance(fundingSellerReceive.getBalance().add(totalCost));
-
-        // Lưu tất cả ví
-        fundingWalletRepository.saveAll(Arrays.asList(
-                fundingBuyerReceive, fundingSellerSend, fundingSellerReceive, fundingBuyerSend));
-
-        log.info("✅ Trade executed: {} {} @ {} - Buyer: {}, Seller: {}",
-                quantity, coin, price, buyerUid, sellerUid);
-    }
 
     public ResponseEntity<?> getWalletFunding(String header) {
         String jwt = header.substring(7);

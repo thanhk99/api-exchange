@@ -45,6 +45,7 @@ public class SpotService {
         if (!checkBalance(entity, uid)) {
             return ResponseEntity.badRequest().body(Map.of("message", "Bad Request", "data", "Số dư không đủ"));
         }
+        checkWalletRecive(entity, uid);
         OrderBooks orderBooks = orderBooksRepository.findByUidAndSymbolAndPriceAndStatusAndOrderTypeAndTradeType(uid,
                 entity.getSymbol(),
                 entity.getPrice(), OrderStatus.PENDING, entity.getOrderType(), entity.getTradeType());
@@ -97,7 +98,7 @@ public class SpotService {
             }
         } else {
             if (entity.getOrderType().equals(OrderType.BUY)) {
-                FundingWallet fundingWallet = fundingWalletRepository.findByUidAndCurrency(uid, stable);
+                SpotWallet fundingWallet = spotWalletRepository.findByUidAndCurrency(uid, stable);
                 if (fundingWallet == null) {
                     return false;
                 }
@@ -105,7 +106,7 @@ public class SpotService {
                     return false;
                 }
             } else {
-                FundingWallet fundingWallet = fundingWalletRepository.findByUidAndCurrency(uid, coin);
+                SpotWallet fundingWallet = spotWalletRepository.findByUidAndCurrency(uid, coin);
                 if (fundingWallet == null) {
                     return false;
                 }
@@ -124,16 +125,46 @@ public class SpotService {
         String stable = parts[1];
         if (entity.getTradeType().equals(TradeType.LIMIT)) {
             if (entity.getOrderType().equals(OrderType.BUY)) {
-                FundingWallet fundingWallet = fundingWalletRepository.findByUidAndCurrency(uid, stable);
+                SpotWallet spotWallet = spotWalletRepository.findByUidAndCurrency(uid, stable);
                 BigDecimal totalStableCoin = entity.getPrice().multiply(entity.getQuantity());
-                fundingWallet.setLockedBalance(totalStableCoin);
-                fundingWallet.setBalance(fundingWallet.getBalance().subtract(totalStableCoin));
-                fundingWalletRepository.save(fundingWallet);
+                spotWallet.setLockedBalance(spotWallet.getLockedBalance().add(totalStableCoin));
+                spotWallet.setBalance(spotWallet.getBalance().subtract(totalStableCoin));
+                spotWalletRepository.save(spotWallet);
             } else {
-                FundingWallet fundingWallet = fundingWalletRepository.findByUidAndCurrency(uid, coin);
-                fundingWallet.setLockedBalance(entity.getQuantity());
-                fundingWallet.setBalance(fundingWallet.getBalance().subtract(entity.getQuantity()));
-                fundingWalletRepository.save(fundingWallet);
+                SpotWallet spotWallet = spotWalletRepository.findByUidAndCurrency(uid, coin);
+                spotWallet.setLockedBalance(spotWallet.getLockedBalance().add(entity.getQuantity()));
+                spotWallet.setBalance(spotWallet.getBalance().subtract(entity.getQuantity()));
+                spotWalletRepository.save(spotWallet);
+            }
+        }
+    }
+    
+    @Transactional
+    public void checkWalletRecive(OrderBooks entity, String uid) {
+        String[] parts = entity.getSymbol().split("/");
+        String coin = parts[0];
+        String stable = parts[1];
+        if(entity.getOrderType().equals(OrderType.BUY)) {
+            SpotWallet spotWallet = spotWalletRepository.findByUidAndCurrency(uid, coin);
+            if (spotWallet == null) {
+                SpotWallet newWallet = new SpotWallet();
+                newWallet.setUid(uid);
+                newWallet.setCurrency(coin);
+                newWallet.setBalance(BigDecimal.ZERO);
+                newWallet.setLockedBalance(BigDecimal.ZERO);
+                newWallet.setActive(true);
+                spotWalletRepository.save(newWallet);
+            }
+        }   else {
+            SpotWallet spotWallet = spotWalletRepository.findByUidAndCurrency(uid, stable);
+            if (spotWallet == null) {
+                SpotWallet newWallet = new SpotWallet();
+                newWallet.setUid(uid);
+                newWallet.setCurrency(stable);
+                newWallet.setBalance(BigDecimal.ZERO);
+                newWallet.setLockedBalance(BigDecimal.ZERO);
+                newWallet.setActive(true);
+                spotWalletRepository.save(newWallet);
             }
         }
     }

@@ -11,7 +11,6 @@ import org.springframework.web.bind.annotation.RestController;
 import api.exchange.models.FundingWallet;
 import api.exchange.services.FundingWalletService;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 
 
 @RestController
