@@ -5,8 +5,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import api.exchange.dtos.Requset.LoginRequest;
+import api.exchange.dtos.Requset.RefreshTokenRequest;
 import api.exchange.dtos.Requset.SignupRequest;
-import api.exchange.dtos.Response.RefreshTokenRequest;
 import api.exchange.models.UserDevice;
 import api.exchange.services.AuthService;
 import jakarta.servlet.http.HttpServletRequest;

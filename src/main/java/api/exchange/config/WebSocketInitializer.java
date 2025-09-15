@@ -29,7 +29,7 @@ public class WebSocketInitializer {
     @Value("${binance.api.urlSocket}")
     private String WebsocketUrl;
 
-    // @Bean
+    @Bean
     public SpotMarketWebSocket SpotMarketWebSocket() {
         try {
             SpotMarketWebSocket client = new SpotMarketWebSocket(

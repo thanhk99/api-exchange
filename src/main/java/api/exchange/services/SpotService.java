@@ -19,6 +19,7 @@ import api.exchange.models.OrderBooks.TradeType;
 import api.exchange.repository.SpotWalletRepository;
 import api.exchange.repository.OrderBooksRepository;
 import api.exchange.sercurity.jwt.JwtUtil;
+import api.exchange.websocket.SpotOrderWebsocket;
 import jakarta.transaction.Transactional;
 
 @Service
@@ -37,6 +38,9 @@ public class SpotService {
 
     @Autowired
     private OrderBooksService orderBooksService;
+
+    @Autowired
+    private SpotOrderWebsocket spotOrderWebsocket;
 
     @Transactional
     public ResponseEntity<?> createOrder(OrderBooks entity, String header) {
@@ -63,6 +67,8 @@ public class SpotService {
         lockBalanceLimit(entity, uid);
 
         orderBooksRepository.save(entity);
+
+        spotOrderWebsocket.broadcastOrderBooks(entity);
 
         eventPublisher.publishEvent(new OrderMatchService.OrderCreatedEvent(entity));
 
@@ -138,13 +144,13 @@ public class SpotService {
             }
         }
     }
-    
+
     @Transactional
     public void checkWalletRecive(OrderBooks entity, String uid) {
         String[] parts = entity.getSymbol().split("/");
         String coin = parts[0];
         String stable = parts[1];
-        if(entity.getOrderType().equals(OrderType.BUY)) {
+        if (entity.getOrderType().equals(OrderType.BUY)) {
             SpotWallet spotWallet = spotWalletRepository.findByUidAndCurrency(uid, coin);
             if (spotWallet == null) {
                 SpotWallet newWallet = new SpotWallet();
@@ -155,7 +161,7 @@ public class SpotService {
                 newWallet.setActive(true);
                 spotWalletRepository.save(newWallet);
             }
-        }   else {
+        } else {
             SpotWallet spotWallet = spotWalletRepository.findByUidAndCurrency(uid, stable);
             if (spotWallet == null) {
                 SpotWallet newWallet = new SpotWallet();

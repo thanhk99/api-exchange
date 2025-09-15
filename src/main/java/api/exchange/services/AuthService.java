@@ -18,9 +18,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.server.ResponseStatusException;
 
 import api.exchange.dtos.Requset.LoginRequest;
+import api.exchange.dtos.Requset.RefreshTokenRequest;
 import api.exchange.dtos.Requset.SignupRequest;
 import api.exchange.dtos.Response.AuthResponse;
-import api.exchange.dtos.Response.RefreshTokenRequest;
 import api.exchange.models.User;
 import api.exchange.models.UserDevice;
 import api.exchange.models.refreshToken;
@@ -133,7 +133,7 @@ public class AuthService {
             refreshToken refreshToken = jwtUtil.generateRefreshToken(user, deviceId);
             Map<String, Object> deviceRespone = deviceService.buildDeviceResponse(device);
 
-            return ResponseEntity.ok( Map.of("message","success","data",
+            return ResponseEntity.ok(Map.of("message", "success", "data",
                     new AuthResponse(
                             accessToken,
                             refreshToken.getToken(),
@@ -165,7 +165,7 @@ public class AuthService {
             String deviceId = refreshToken.getDeviceId();
             if (refreshToken.getExpiresAt().isBefore(LocalDateTime.now())) {
                 refreshTokenRepository.delete(refreshToken);
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message","refresh token expried"));
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "refresh token expried"));
             }
             refreshTokenRepository.delete(refreshToken);
 
@@ -186,7 +186,7 @@ public class AuthService {
         } catch (ResponseStatusException e) {
             throw e; // Re-throw các lỗi đã được định nghĩa
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message","refresh token expried"));
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "refresh token expried"));
         }
     }
 

@@ -2,10 +2,13 @@ package api.exchange.websocket;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.stereotype.Service;
+
 import api.exchange.models.OrderBooks;
 import java.util.HashMap;
 import java.util.Map;
 
+@Service
 public class SpotOrderWebsocket {
 
     @Autowired
@@ -18,6 +21,6 @@ public class SpotOrderWebsocket {
         orderData.put("quanlity", order.getQuantity());
         orderData.put("timestamp", System.currentTimeMillis());
 
-        messagingTemplate.convertAndSend("/topic/spot/orderbook/" + order.getSymbol(), orderData);
+        messagingTemplate.convertAndSend("/topic/spot/orderbook", orderData);
     }
 }
