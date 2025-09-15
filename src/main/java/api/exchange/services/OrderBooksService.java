@@ -29,7 +29,6 @@ public class OrderBooksService {
     @Autowired
     private SpotHistoryService spotHistoryService;
 
-
     OrderBooksService(SpotWalletService spotWalletService) {
         this.spotWalletService = spotWalletService;
     }
