@@ -46,4 +46,8 @@ public class AuthController {
         return authService.isExistEmail(signupRequest);
     }
 
+    @GetMapping("hello")
+    public String hello() {
+        return "Hello World";
+    }
 }
