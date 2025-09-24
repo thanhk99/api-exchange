@@ -54,16 +54,27 @@ public class OrderBooksService {
             List<OrderBooks> sellOrders = redisTemplate.opsForValue().get("sellOrders:" + order.getSymbol());
             processMarketOrders(buyOrders, sellOrders, order.getSymbol());
         } else {
-            log.info("🚀 Processing limit orders for symbol: {}", order.getSymbol());
-            List<OrderBooks> buyOrders = orderBooksRepository.findBySymbolAndOrderTypeAndStatus(order.getSymbol(),
-                    api.exchange.models.OrderBooks.OrderType.BUY, OrderStatus.PENDING);
-            List<OrderBooks> sellOrders = orderBooksRepository.findBySymbolAndOrderTypeAndStatus(order.getSymbol(),
-                    api.exchange.models.OrderBooks.OrderType.SELL, OrderStatus.PENDING);
+            log.info("🚀 Processing limit orders for symbol: {}", order.getSymbol())
+            List<OrderBooks> buyOrders = redisTemplate.opsForValue().get("buyOrders:" + order.getSymbol());
             processLimitOrders(buyOrders, sellOrders, order.getSymbol());
             
         }
 
         log.debug("🔍 Starting matching for symbol: {}", order.getSymbol());
+    }
+    public Set<String> getAllKeys(String pattern) {
+        if (redisTemplate == null) {
+            log.error("❌ RedisTemplate is not initialized.");
+            return null;
+        }
+        try {
+            Set<String> keys = redisTemplate.keys(pattern);
+            log.info("Found {} keys matching pattern {}: {}", keys != null ? keys.size() : 0, pattern, keys);
+            return keys;
+        } catch (Exception e) {
+            log.error("Error retrieving keys for pattern {}: {}", pattern, e.getMessage(), e);
+            return null;
+        }
     }
 
     private void processMarketOrders(List<OrderBooks> buyOrders, List<OrderBooks> sellOrders, String symbol) {
