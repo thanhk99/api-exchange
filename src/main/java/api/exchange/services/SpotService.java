@@ -70,6 +70,7 @@ public class SpotService {
 
         spotOrderWebsocket.broadcastOrderBooks(entity);
 
+        orderBooksService.addOrderToRedis(entity);
         eventPublisher.publishEvent(new OrderMatchService.OrderCreatedEvent(entity));
 
         return ResponseEntity.ok(Map.of("message", "success", "data", "Tạo Order thành công "));

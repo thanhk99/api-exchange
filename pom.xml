@@ -162,6 +162,16 @@
 			<artifactId>spring-security-messaging</artifactId>
 			<version>6.2.0</version> <!-- Sử dụng version phù hợp với Spring Boot của bạn -->
 		</dependency>
+
+		<!-- Redis -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-data-redis</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>com.fasterxml.jackson.datatype</groupId>
+			<artifactId>jackson-datatype-jsr310</artifactId>
+		</dependency>
 	</dependencies>
 
 	<build>

@@ -7,6 +7,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,33 +30,40 @@ public class OrderBooksService {
     @Autowired
     private SpotHistoryService spotHistoryService;
 
-    OrderBooksService(SpotWalletService spotWalletService) {
+    private RedisTemplate<String, OrderBooks> redisTemplate;
+
+    public OrderBooksService(RedisTemplate<String, OrderBooks> redisTemplate,SpotWalletService spotWalletService) {
+        this.redisTemplate = redisTemplate;
         this.spotWalletService = spotWalletService;
+
+    }
+
+    public void addOrderToRedis(OrderBooks order) {
+        String key  = order.isBuyOrder() ? "buyOrders:" + order.getSymbol() : "sellOrders:" + order.getSymbol();
+        double score = order.isMarketOrder() ? 0 : // Market orders ưu tiên
+        order.getPrice().doubleValue() * (order.isBuyOrder() ? -1 : 1);
+        redisTemplate.opsForZSet().add(key, order, score);
+        log.info("➕ Added order to Redis: {} with score {}", order.getId(), score);
     }
 
     @Transactional
-    public void matchOrders(String symbol) {
-        log.debug("🔍 Starting matching for symbol: {}", symbol);
+    public void matchOrders(OrderBooks order) {
+        if (order.getTradeType() == api.exchange.models.OrderBooks.TradeType.MARKET) {
+            log.info("🚀 Processing market orders for symbol: {}", order.getSymbol());
+            List<OrderBooks> buyOrders = redisTemplate.opsForValue().get("buyOrders:" + order.getSymbol());
+            List<OrderBooks> sellOrders = redisTemplate.opsForValue().get("sellOrders:" + order.getSymbol());
+            processMarketOrders(buyOrders, sellOrders, order.getSymbol());
+        } else {
+            log.info("🚀 Processing limit orders for symbol: {}", order.getSymbol());
+            List<OrderBooks> buyOrders = orderBooksRepository.findBySymbolAndOrderTypeAndStatus(order.getSymbol(),
+                    api.exchange.models.OrderBooks.OrderType.BUY, OrderStatus.PENDING);
+            List<OrderBooks> sellOrders = orderBooksRepository.findBySymbolAndOrderTypeAndStatus(order.getSymbol(),
+                    api.exchange.models.OrderBooks.OrderType.SELL, OrderStatus.PENDING);
+            processLimitOrders(buyOrders, sellOrders, order.getSymbol());
+            
+        }
 
-        // Lấy tất cả orders active
-        List<OrderBooks> allOrders = orderBooksRepository.findActiveOrders(symbol);
-
-        // Tách thành buy và sell orders
-        List<OrderBooks> buyOrders = allOrders.stream()
-                .filter(OrderBooks::isBuyOrder)
-                .collect(Collectors.toList());
-
-        List<OrderBooks> sellOrders = allOrders.stream()
-                .filter(OrderBooks::isSellOrder)
-                .collect(Collectors.toList());
-
-        log.debug("📊 Buy orders: {}, Sell orders: {}", buyOrders.size(), sellOrders.size());
-
-        // Xử lý market orders trước (ưu tiên cao nhất)
-        processMarketOrders(buyOrders, sellOrders, symbol);
-
-        // Sau đó xử lý limit orders
-        processLimitOrders(buyOrders, sellOrders, symbol);
+        log.debug("🔍 Starting matching for symbol: {}", order.getSymbol());
     }
 
     private void processMarketOrders(List<OrderBooks> buyOrders, List<OrderBooks> sellOrders, String symbol) {
