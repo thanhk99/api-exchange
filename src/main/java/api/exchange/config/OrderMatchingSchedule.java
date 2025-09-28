@@ -23,20 +23,20 @@ public class OrderMatchingSchedule {
         symbolsToMatch.add(symbol);
     }
 
-    @Scheduled(fixedRate = 1000) // Chạy mỗi giây
-    public void processScheduledMatching() {
-        if (symbolsToMatch.isEmpty()) {
-            return;
-        }
+    // @Scheduled(fixedRate = 1000) 
+    // public void processScheduledMatching() {
+    //     if (symbolsToMatch.isEmpty()) {
+    //         return;
+    //     }
 
-        for (String symbol : symbolsToMatch) {
-            try {
-                orderBooksService.matchOrders(symbol);
-            } catch (Exception e) {
-                log.error("Error matching orders for symbol: {}", symbol, e);
-            }
-        }
+    //     for (String symbol : symbolsToMatch) {
+    //         try {
+    //             orderBooksService.matchOrders(symbol);
+    //         } catch (Exception e) {
+    //             log.error("Error matching orders for symbol: {}", symbol, e);
+    //         }
+    //     }
 
-        symbolsToMatch.clear();
-    }
+    //     symbolsToMatch.clear();
+    // }
 }

@@ -2,9 +2,7 @@ package api.exchange.services;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.*;
-import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -13,345 +11,193 @@ import org.springframework.transaction.annotation.Transactional;
 
 import api.exchange.models.OrderBooks;
 import api.exchange.models.OrderBooks.OrderStatus;
-import api.exchange.models.SpotHistory.TradeType;
+import api.exchange.models.SpotWalletHistory;
 import api.exchange.repository.OrderBooksRepository;
+import api.exchange.repository.SpotWalletHistoryRepository;
 import lombok.extern.slf4j.Slf4j;
 
 @Service
 @Slf4j
 public class OrderBooksService {
 
-    @Autowired
-    private SpotWalletService spotWalletService;
 
     @Autowired
     private OrderBooksRepository orderBooksRepository;
 
     @Autowired
-    private SpotHistoryService spotHistoryService;
-
     private RedisTemplate<String, OrderBooks> redisTemplate;
 
-    public OrderBooksService(RedisTemplate<String, OrderBooks> redisTemplate,SpotWalletService spotWalletService) {
-        this.redisTemplate = redisTemplate;
-        this.spotWalletService = spotWalletService;
+    @Autowired
+    private OrderBatchProcessor batchProcessor;
 
-    }
+    @Autowired
+    private SpotWalletHistoryRepository spotWalletHistoryRepository;
 
     public void addOrderToRedis(OrderBooks order) {
         String key  = order.isBuyOrder() ? "buyOrders:" + order.getSymbol() : "sellOrders:" + order.getSymbol();
-        double score = order.isMarketOrder() ? 0 : // Market orders ưu tiên
+        double score = order.isMarketOrder() ? 0 : 
         order.getPrice().doubleValue() * (order.isBuyOrder() ? -1 : 1);
         redisTemplate.opsForZSet().add(key, order, score);
         log.info("➕ Added order to Redis: {} with score {}", order.getId(), score);
     }
 
     @Transactional
-    public void matchOrders(OrderBooks order) {
-        if (order.getTradeType() == api.exchange.models.OrderBooks.TradeType.MARKET) {
-            log.info("🚀 Processing market orders for symbol: {}", order.getSymbol());
-            List<OrderBooks> buyOrders = redisTemplate.opsForValue().get("buyOrders:" + order.getSymbol());
-            List<OrderBooks> sellOrders = redisTemplate.opsForValue().get("sellOrders:" + order.getSymbol());
-            processMarketOrders(buyOrders, sellOrders, order.getSymbol());
-        } else {
-            log.info("🚀 Processing limit orders for symbol: {}", order.getSymbol())
-            List<OrderBooks> buyOrders = redisTemplate.opsForValue().get("buyOrders:" + order.getSymbol());
-            processLimitOrders(buyOrders, sellOrders, order.getSymbol());
+    public void matchOrders(OrderBooks newOrder) {
+        if (newOrder.isFullyFilled()) {
+            log.info("🟡 Order {} already fully filled", newOrder.getId());
+            return;
+        }
+        
+        String oppositeKey = getOppositeOrderKey(newOrder);
+        Set<OrderBooks> oppositeOrders = redisTemplate.opsForZSet().range(oppositeKey, 0, -1);
+        
+        if (oppositeOrders == null || oppositeOrders.isEmpty()) {
+            // Không có orders đối lập, thêm vào Redis
+            addOrderToRedis(newOrder);
+            log.info("📥 No opposite orders, added to Redis: {}", newOrder.getId());
+            return;
+        }
+        
+        log.info("🔍 Matching order {} with {} opposite orders", newOrder.getId(), oppositeOrders.size());
+        
+        // Duyệt qua các orders đối lập để khớp
+        for (OrderBooks oppositeOrder : oppositeOrders) {
+            if (newOrder.isFullyFilled()) break;
+            if (!validateOrder(oppositeOrder)) continue;
             
-        }
-
-        log.debug("🔍 Starting matching for symbol: {}", order.getSymbol());
-    }
-    public Set<String> getAllKeys(String pattern) {
-        if (redisTemplate == null) {
-            log.error("❌ RedisTemplate is not initialized.");
-            return null;
-        }
-        try {
-            Set<String> keys = redisTemplate.keys(pattern);
-            log.info("Found {} keys matching pattern {}: {}", keys != null ? keys.size() : 0, pattern, keys);
-            return keys;
-        } catch (Exception e) {
-            log.error("Error retrieving keys for pattern {}: {}", pattern, e.getMessage(), e);
-            return null;
-        }
-    }
-
-    private void processMarketOrders(List<OrderBooks> buyOrders, List<OrderBooks> sellOrders, String symbol) {
-        // Tách market orders
-        List<OrderBooks> marketBuyOrders = buyOrders.stream()
-                .filter(OrderBooks::isMarketOrder)
-                .filter(order -> order.getStatus() == OrderStatus.PENDING)
-                .collect(Collectors.toList());
-
-        List<OrderBooks> marketSellOrders = sellOrders.stream()
-                .filter(OrderBooks::isMarketOrder)
-                .filter(order -> order.getStatus() == OrderStatus.PENDING)
-                .collect(Collectors.toList());
-
-        log.debug("🔄 Processing {} market buy and {} market sell orders",
-                marketBuyOrders.size(), marketSellOrders.size());
-
-        // Đầu tiên: Matching giữa market buy và market sell
-        matchMarketWithMarket(marketBuyOrders, marketSellOrders);
-
-        // Sau đó: Xử lý market buy orders với limit sell orders
-        for (OrderBooks marketBuy : marketBuyOrders) {
-            if (marketBuy.getStatus() != OrderStatus.PENDING) {
-                continue;
+            if (canMatch(newOrder, oppositeOrder)) {
+                executeTrade(newOrder, oppositeOrder, oppositeKey);
             }
-
-            // Tìm limit sell orders có sẵn (sắp xếp giá thấp nhất trước)
-            List<OrderBooks> availableSellOrders = sellOrders.stream()
-                    .filter(OrderBooks::isLimitOrder)
-                    .filter(order -> order.getStatus() == OrderStatus.PENDING)
-                    .sorted(Comparator.comparing(OrderBooks::getPrice)
-                            .thenComparing(OrderBooks::getCreatedAt))
-                    .collect(Collectors.toList());
-
-            matchMarketBuyWithLimitSells(marketBuy, availableSellOrders);
         }
+        
+        // Xử lý newOrder sau khi matching
+        handleOrderAfterMatching(newOrder);
+    }
+    private void executeTrade(OrderBooks newOrder, OrderBooks oppositeOrder, String oppositeKey) {
+        BigDecimal matchQuantity = newOrder.getRemainingQuantity()
+            .min(oppositeOrder.getRemainingQuantity());
+        BigDecimal tradePrice = calculateTradePrice(newOrder, oppositeOrder);
+        
+        log.info("🎯 Executing trade: {} units at {} between order {} and {}", 
+                matchQuantity, tradePrice, newOrder.getId(), oppositeOrder.getId());
+        
+        // Cập nhật filled quantity
+        newOrder.setFilledQuantity(newOrder.getFilledQuantity().add(matchQuantity));
+        oppositeOrder.setFilledQuantity(oppositeOrder.getFilledQuantity().add(matchQuantity));
+        
+        // Cập nhật trạng thái
+        updateOrderStatus(newOrder);
+        updateOrderStatus(oppositeOrder);
+        
+        // Cập nhật opposite order trong Redis
+        updateOrderInRedis(oppositeKey, oppositeOrder);
+        
+        // Tạo trade record
+        createTradeRecord(newOrder, oppositeOrder, matchQuantity, tradePrice);
+        
+        log.info("✅ Trade executed: {} -> {} units filled", 
+                newOrder.getId(), newOrder.getFilledQuantity());
+    }
+    
 
-        // Cuối cùng: Xử lý market sell orders với limit buy orders
-        for (OrderBooks marketSell : marketSellOrders) {
-            if (marketSell.getStatus() != OrderStatus.PENDING) {
-                continue;
-            }
-
-            // Tìm limit buy orders có sẵn (sắp xếp giá cao nhất trước)
-            List<OrderBooks> availableBuyOrders = buyOrders.stream()
-                    .filter(OrderBooks::isLimitOrder)
-                    .filter(order -> order.getStatus() == OrderStatus.PENDING)
-                    .sorted(Comparator.comparing(OrderBooks::getPrice).reversed()
-                            .thenComparing(OrderBooks::getCreatedAt))
-                    .collect(Collectors.toList());
-
-            matchMarketSellWithLimitBuys(marketSell, availableBuyOrders);
+    private void handleOrderAfterMatching(OrderBooks order) {
+        updateOrderStatus(order);
+        
+        if (order.isFullyFilled()) {
+            log.info("✅ Order fully filled: {}", order.getId());
+            // Không cần thêm vào Redis vì đã filled
+        } else {
+            // Order chưa filled hết, thêm vào Redis để chờ khớp tiếp
+            addOrderToRedis(order);
+            log.info("🟡 Order partially filled, added to Redis: {} (filled: {}/{})", 
+                    order.getId(), order.getFilledQuantity(), order.getQuantity());
         }
+        
+        // Luôn cập nhật vào DB
+        batchProcessor.addOrderToBatch(order);
     }
 
-    private void matchMarketWithMarket(List<OrderBooks> marketBuys, List<OrderBooks> marketSells) {
-        // Sắp xếp theo thời gian (cũ nhất trước)
-        marketBuys.sort(Comparator.comparing(OrderBooks::getCreatedAt));
-        marketSells.sort(Comparator.comparing(OrderBooks::getCreatedAt));
+    private void updateOrderStatus(OrderBooks order) {
+        if (order.isFullyFilled()) {
+            order.setStatus(OrderStatus.FILLED);
+        } else if (order.getFilledQuantity().compareTo(BigDecimal.ZERO) > 0) {
+            order.setStatus(OrderStatus.PARTIALLY_FILLED);
+        } else {
+            order.setStatus(OrderStatus.ACTIVE);
+        }
+        order.setUpdatedAt(LocalDateTime.now());
+    }
+    
+    private String getOppositeOrderKey(OrderBooks order) {
+        return order.isBuyOrder() ? "sellOrders:" + order.getSymbol() : "buyOrders:" + order.getSymbol();
+    }
 
-        int buyIndex = 0;
-        int sellIndex = 0;
+    private boolean validateOrder(OrderBooks order) {
+        return order != null && 
+               order.getQuantity() != null &&
+               order.getQuantity().compareTo(BigDecimal.ZERO) > 0 &&
+               (order.isMarketOrder() || order.getPrice() != null);
+    }
 
-        while (buyIndex < marketBuys.size() && sellIndex < marketSells.size()) {
-            OrderBooks marketBuy = marketBuys.get(buyIndex);
-            OrderBooks marketSell = marketSells.get(sellIndex);
+    private boolean canMatch(OrderBooks newOrder, OrderBooks oppositeOrder) {
+        // Market orders always match
+        if (newOrder.isMarketOrder() || oppositeOrder.isMarketOrder()) {
+            return true;
+        }
 
-            if (marketBuy.getStatus() != OrderStatus.PENDING ||
-                    marketSell.getStatus() != OrderStatus.PENDING) {
-                if (marketBuy.getStatus() != OrderStatus.PENDING)
-                    buyIndex++;
-                if (marketSell.getStatus() != OrderStatus.PENDING)
-                    sellIndex++;
-                continue;
-            }
-
-            BigDecimal matchQuantity = marketBuy.getQuantity().min(marketSell.getQuantity());
-
-            // Với market vs market, cần lấy giá từ thị trường (last traded price)
-            // Tạm thời dùng giá mặc định, trong thực tế nên lấy từ database
-            BigDecimal marketPrice = getLastTradedPrice(marketBuy.getSymbol());
-
-            if (marketPrice == null) {
-                log.warn("⚠️ No market price available for symbol: {}", marketBuy.getSymbol());
-                break;
-            }
-
-            log.info("🎯 MARKET-MARKET Match: {} @ {} between Buy#{} and Sell#{}",
-                    matchQuantity, marketPrice, marketBuy.getId(), marketSell.getId());
-
-            executeTrade(marketBuy, marketSell, marketPrice, matchQuantity, TradeType.MARKET_MARKET);
-
-            if (marketBuy.getStatus() == OrderStatus.DONE) {
-                buyIndex++;
-            }
-            if (marketSell.getStatus() == OrderStatus.DONE) {
-                sellIndex++;
-            }
+        // Limit order matching logic
+        if (newOrder.isBuyOrder()) {
+            return newOrder.getPrice().compareTo(oppositeOrder.getPrice()) >= 0;
+        } else {
+            return newOrder.getPrice().compareTo(oppositeOrder.getPrice()) <= 0;
         }
     }
 
-    private void matchMarketBuyWithLimitSells(OrderBooks marketBuy, List<OrderBooks> limitSells) {
-        BigDecimal remainingQuantity = marketBuy.getQuantity();
-
-        for (OrderBooks limitSell : limitSells) {
-            if (remainingQuantity.compareTo(BigDecimal.ZERO) <= 0) {
-                break;
-            }
-
-            if (limitSell.getStatus() != OrderStatus.PENDING) {
-                continue;
-            }
-
-            BigDecimal matchQuantity = remainingQuantity.min(limitSell.getQuantity());
-            BigDecimal tradePrice = limitSell.getPrice(); // Market buy lấy giá của limit sell
-
-            log.info("💰 MARKET BUY - LIMIT SELL: {} @ {} - Buy#{} vs Sell#{}",
-                    matchQuantity, tradePrice, marketBuy.getId(), limitSell.getId());
-
-            executeTrade(marketBuy, limitSell, tradePrice, matchQuantity, TradeType.MARKET_LIMIT_BUY);
-            remainingQuantity = remainingQuantity.subtract(matchQuantity);
-        }
-
-        updateOrderQuantity(marketBuy, remainingQuantity);
-    }
-
-    private void matchMarketSellWithLimitBuys(OrderBooks marketSell, List<OrderBooks> limitBuys) {
-        BigDecimal remainingQuantity = marketSell.getQuantity();
-
-        for (OrderBooks limitBuy : limitBuys) {
-            if (remainingQuantity.compareTo(BigDecimal.ZERO) <= 0) {
-                break;
-            }
-
-            if (limitBuy.getStatus() != OrderStatus.PENDING) {
-                continue;
-            }
-
-            BigDecimal matchQuantity = remainingQuantity.min(limitBuy.getQuantity());
-            BigDecimal tradePrice = limitBuy.getPrice(); // Market sell lấy giá của limit buy
-
-            log.info("💰 MARKET SELL - LIMIT BUY: {} @ {} - Sell#{} vs Buy#{}",
-                    matchQuantity, tradePrice, marketSell.getId(), limitBuy.getId());
-
-            executeTrade(limitBuy, marketSell, tradePrice, matchQuantity, TradeType.MARKET_LIMIT_SELL);
-            remainingQuantity = remainingQuantity.subtract(matchQuantity);
-        }
-
-        updateOrderQuantity(marketSell, remainingQuantity);
-    }
-
-    private void updateOrderQuantity(OrderBooks order, BigDecimal remainingQuantity) {
-        if (remainingQuantity.compareTo(order.getQuantity()) < 0) {
-            order.setQuantity(remainingQuantity);
-            order.setUpdatedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
-            orderBooksRepository.save(order);
+    private BigDecimal calculateTradePrice(OrderBooks order1, OrderBooks order2) {
+        // Priority: existing limit order price > market order logic
+        if (order1.isMarketOrder() && !order2.isMarketOrder()) {
+            return order2.getPrice();
+        } else if (!order1.isMarketOrder() && order2.isMarketOrder()) {
+            return order1.getPrice();
+        } else if (order1.isMarketOrder() && order2.isMarketOrder()) {
+            return getLastTradedPrice(order1.getSymbol());
+        } else {
+            // Both are limit orders - use the opposite order's price
+            return order1.isBuyOrder() ? order2.getPrice() : order1.getPrice();
         }
     }
 
-    private void processLimitOrders(List<OrderBooks> buyOrders, List<OrderBooks> sellOrders, String symbol) {
-        // Lọc chỉ limit orders còn active
-        List<OrderBooks> limitBuyOrders = buyOrders.stream()
-                .filter(OrderBooks::isLimitOrder)
-                .filter(order -> order.getStatus() == OrderStatus.PENDING)
-                .collect(Collectors.toList());
-
-        List<OrderBooks> limitSellOrders = sellOrders.stream()
-                .filter(OrderBooks::isLimitOrder)
-                .filter(order -> order.getStatus() == OrderStatus.PENDING)
-                .collect(Collectors.toList());
-
-        log.debug("🔄 Processing {} limit buy and {} limit sell orders",
-                limitBuyOrders.size(), limitSellOrders.size());
-
-        // Sử dụng PriorityQueue cho limit order matching
-        PriorityQueue<OrderBooks> buyQueue = new PriorityQueue<>((o1, o2) -> {
-            int priceCompare = o2.getPrice().compareTo(o1.getPrice()); // Giá cao nhất trước
-            if (priceCompare != 0)
-                return priceCompare;
-            return o1.getCreatedAt().compareTo(o2.getCreatedAt()); // Cũ nhất trước
-        });
-
-        PriorityQueue<OrderBooks> sellQueue = new PriorityQueue<>((o1, o2) -> {
-            int priceCompare = o1.getPrice().compareTo(o2.getPrice()); // Giá thấp nhất trước
-            if (priceCompare != 0)
-                return priceCompare;
-            return o1.getCreatedAt().compareTo(o2.getCreatedAt()); // Cũ nhất trước
-        });
-
-        buyQueue.addAll(limitBuyOrders);
-        sellQueue.addAll(limitSellOrders);
-
-        int matchCount = 0;
-        while (!buyQueue.isEmpty() && !sellQueue.isEmpty()) {
-            OrderBooks bestBuy = buyQueue.peek();
-            OrderBooks bestSell = sellQueue.peek();
-
-            log.debug("⚖️  Comparing Limit Buy[{}@{}] vs Limit Sell[{}@{}]",
-                    bestBuy.getId(), bestBuy.getPrice(),
-                    bestSell.getId(), bestSell.getPrice());
-
-            if (bestBuy.getPrice().compareTo(bestSell.getPrice()) >= 0) {
-                BigDecimal matchQuantity = bestBuy.getQuantity().min(bestSell.getQuantity());
-                BigDecimal tradePrice = determineTradePrice(bestBuy, bestSell);
-
-                log.info("🤝 LIMIT-LIMIT Match: {} @ {} between Buy#{} and Sell#{}",
-                        matchQuantity, tradePrice, bestBuy.getId(), bestSell.getId());
-
-                executeTrade(bestBuy, bestSell, tradePrice, matchQuantity, TradeType.LIMIT_LIMIT);
-                matchCount++;
-
-                // Remove filled orders from queues
-                if (bestBuy.getStatus() == OrderStatus.DONE) {
-                    buyQueue.poll();
-                    log.debug("✅ Removed filled buy order: {}", bestBuy.getId());
-                }
-                if (bestSell.getStatus() == OrderStatus.DONE) {
-                    sellQueue.poll();
-                    log.debug("✅ Removed filled sell order: {}", bestSell.getId());
-                }
-            } else {
-                log.debug("❌ No more limit matches possible");
-                break;
-            }
+    private void updateOrderInRedis(String key, OrderBooks order) {
+        if (order.getQuantity().compareTo(BigDecimal.ZERO) == 0) {
+            redisTemplate.opsForZSet().remove(key, order);
+            log.debug("🗑️ Order removed from Redis: {}", order.getId());
+        } else {
+            redisTemplate.opsForZSet().add(key, order, calculateScore(order));
+            log.debug("📝 Order updated in Redis: {}", order.getId());
         }
-
-        log.info("🎯 Limit matching completed. {} trades executed for symbol: {}", matchCount, symbol);
     }
 
-    private void executeTrade(OrderBooks buyOrder, OrderBooks sellOrder, BigDecimal price, BigDecimal quantity,
-            TradeType tradeType) {
-        // Update order quantities
-        BigDecimal newQuantity1 = buyOrder.getQuantity().subtract(quantity);
-        BigDecimal newQuantity2 = sellOrder.getQuantity().subtract(quantity);
-        String buyerUid = orderBooksRepository.findById(buyOrder.getId()).get().getUid();
-        String sellerUid = orderBooksRepository.findById(sellOrder.getId()).get().getUid();
-
-        LocalDateTime update_at = LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh"));
-
-        // Update buyOrder - CHỈ set DONE khi quantity = 0
-        if (newQuantity1.compareTo(BigDecimal.ZERO) == 0) {
-            buyOrder.setStatus(OrderStatus.DONE);
+    private double calculateScore(OrderBooks order) {
+        if (order.isMarketOrder()) {
+            return 0;
         }
-        buyOrder.setUpdatedAt(update_at);
-        buyOrder.setQuantity(newQuantity1);
 
-        // Update sellOrder - CHỈ set DONE khi quantity = 0
-        if (newQuantity2.compareTo(BigDecimal.ZERO) == 0) {
-            sellOrder.setStatus(OrderStatus.DONE);
-        }
-        sellOrder.setUpdatedAt(update_at);
-        sellOrder.setQuantity(newQuantity2);
-
-        // Save orders
-        orderBooksRepository.save(buyOrder);
-        orderBooksRepository.save(sellOrder);
-
-        spotWalletService.executeTradeSpot(sellerUid, buyerUid, price, quantity, tradeType, buyOrder.getSymbol(),
-                buyOrder.getPrice());
-
-        spotHistoryService.createSpotRecord(
-                buyOrder.getSymbol(),
-                price,
-                quantity,
-                buyOrder.getId(),
-                sellOrder.getId(),
-                tradeType);
-        // TODO: Create trade record
-        log.info("💾 Saved matched orders: #{}, #{}", buyOrder.getId(), sellOrder.getId());
+        double score = order.getPrice().doubleValue();
+        return order.isBuyOrder() ? -score : score;
     }
-
-    private BigDecimal determineTradePrice(OrderBooks buyOrder, OrderBooks sellOrder) {
-        // Price-time priority: order nào đặt trước thì dùng giá của order đó
-        return buyOrder.getCreatedAt().isBefore(sellOrder.getCreatedAt()) ? buyOrder.getPrice() : sellOrder.getPrice();
+    private void createTradeRecord(OrderBooks buyOrder, OrderBooks sellOrder, 
+                                   BigDecimal quantity, BigDecimal price) {
+        // Tạo và lưu trade record vào DB (chưa implement chi tiết)
+        SpotWalletHistory spotWalletHistory = new SpotWalletHistory();  
+        spotWalletHistory.setAsset(buyOrder.getSymbol());
+        spotWalletHistory.setNote("Trade executed between orders"+ buyOrder.getId() + " and " + sellOrder.getId());
+        spotWalletHistory.setType("TRADE");
+        spotWalletHistory.setBalance(quantity.multiply(price));
+        spotWalletHistory.setCreateDt(LocalDateTime.now());
+        spotWalletHistoryRepository.save(spotWalletHistory);
+        log.info("📝 Trade record created: BuyOrder {}, SellOrder {}, Quantity {}, Price {}", 
+                buyOrder.getId(), sellOrder.getId(), quantity, price);
     }
-
-    // Helper method to get last traded price (cần implement thực tế)
     public BigDecimal getLastTradedPrice(String symbol) {
         // Trong thực tế, lấy từ database hoặc cache
         // Tạm thời return giá mặc định

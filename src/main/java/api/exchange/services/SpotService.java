@@ -12,10 +12,12 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
 import api.exchange.models.SpotWallet;
+import api.exchange.models.SpotWalletHistory;
 import api.exchange.models.OrderBooks;
 import api.exchange.models.OrderBooks.OrderStatus;
 import api.exchange.models.OrderBooks.OrderType;
 import api.exchange.models.OrderBooks.TradeType;
+import api.exchange.repository.SpotWalletHistoryRepository;
 import api.exchange.repository.SpotWalletRepository;
 import api.exchange.repository.OrderBooksRepository;
 import api.exchange.sercurity.jwt.JwtUtil;
@@ -24,6 +26,10 @@ import jakarta.transaction.Transactional;
 
 @Service
 public class SpotService {
+
+    @Autowired
+    private  SpotWalletHistoryRepository spotWalletHistoryRepository;
+
     @Autowired
     private ApplicationEventPublisher eventPublisher;
 
@@ -42,6 +48,10 @@ public class SpotService {
     @Autowired
     private SpotOrderWebsocket spotOrderWebsocket;
 
+    SpotService(SpotWalletHistoryRepository spotWalletHistoryRepository) {
+        this.spotWalletHistoryRepository = spotWalletHistoryRepository;
+    }
+
     @Transactional
     public ResponseEntity<?> createOrder(OrderBooks entity, String header) {
         String jwt = header.substring(7);
@@ -52,7 +62,7 @@ public class SpotService {
         checkWalletRecive(entity, uid);
         OrderBooks orderBooks = orderBooksRepository.findByUidAndSymbolAndPriceAndStatusAndOrderTypeAndTradeType(uid,
                 entity.getSymbol(),
-                entity.getPrice(), OrderStatus.PENDING, entity.getOrderType(), entity.getTradeType());
+                entity.getPrice(), OrderStatus.ACTIVE, entity.getOrderType(), entity.getTradeType());
         LocalDateTime createAt = LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh"));
 
         if (orderBooks != null) {
@@ -60,17 +70,32 @@ public class SpotService {
             orderBooks.setUpdatedAt(createAt);
             return ResponseEntity.ok(Map.of("message", "success", "data", "Cập nhật lệnh"));
         }
-        entity.setStatus(OrderStatus.PENDING);
+        entity.setStatus(OrderStatus.ACTIVE);
         entity.setUid(uid);
         entity.setCreatedAt(createAt);
 
         lockBalanceLimit(entity, uid);
 
-        orderBooksRepository.save(entity);
+        BigDecimal balance;
+        String asset = "";
+        if(entity.getOrderType().equals(OrderType.BUY)){
+            balance= entity.getPrice().multiply(entity.getQuantity());
+            asset = entity.getSymbol().split("/")[1];
+        }else{
+            balance= entity.getQuantity();
+            asset = entity.getSymbol().split("/")[0];
+        }
+        SpotWalletHistory spotWalletHistory = new SpotWalletHistory();
+        spotWalletHistory.setUserId(uid);
+        spotWalletHistory.setAsset(asset);
+        spotWalletHistory.setType("Tạo lệnh");
+        spotWalletHistory.setBalance(balance);
+        spotWalletHistory.setCreateDt(createAt);
+        spotWalletHistoryRepository.save(spotWalletHistory);
 
         spotOrderWebsocket.broadcastOrderBooks(entity);
 
-        orderBooksService.addOrderToRedis(entity);
+        orderBooksService.matchOrders(entity);
         eventPublisher.publishEvent(new OrderMatchService.OrderCreatedEvent(entity));
 
         return ResponseEntity.ok(Map.of("message", "success", "data", "Tạo Order thành công "));
@@ -82,7 +107,7 @@ public class SpotService {
         if (!orderBooks.isPresent()) {
             return ResponseEntity.badRequest().body(Map.of("message", "Bad Request", "data", "Không tìm thấy id"));
         }
-        if (orderBooks.get().getStatus() == OrderStatus.PENDING) {
+        if (orderBooks.get().getStatus() == OrderStatus.ACTIVE) {
             return ResponseEntity.ok(Map.of("message", "success", "data", "Huỷ lệnh thành công"));
         }
         return ResponseEntity.badRequest().body(Map.of("message", "Bad Request", "data", "Không thể huỷ lệnh "));
