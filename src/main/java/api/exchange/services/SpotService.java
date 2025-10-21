@@ -95,8 +95,9 @@ public class SpotService {
 
         spotOrderWebsocket.broadcastOrderBooks(entity);
 
-        orderBooksService.matchOrders(entity);
-        eventPublisher.publishEvent(new OrderMatchService.OrderCreatedEvent(entity));
+        OrderBooks orderSaved = orderBooksRepository.saveAndFlush(entity);
+        orderBooksService.matchOrders(orderSaved);
+        // eventPublisher.publishEvent(new OrderMatchService.OrderCreatedEvent(entity));
 
         return ResponseEntity.ok(Map.of("message", "success", "data", "Tạo Order thành công "));
     }

@@ -10,6 +10,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+//not use
 @Entity
 @Table(name = "spot_history")
 @Data
