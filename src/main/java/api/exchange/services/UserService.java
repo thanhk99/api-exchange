@@ -30,7 +30,12 @@ public class UserService {
                         user.getUid(),
                         user.getEmail(),
                         user.getUsername(),
-                        user.getNation())));
+                        user.getNation(),
+                        user.getKycStatus(),
+                        user.getPhone(),
+                        user.getUserLevel(),
+                        user.getUserStatus()
+                        )));
 
     }
 
