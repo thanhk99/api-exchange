@@ -30,4 +30,9 @@ public class UserController {
         return userService.changeName(user, authHeader);
     }
 
+    @GetMapping("/getAllInfo")
+    public ResponseEntity<?> getAllinfo(@RequestHeader("Authorization") String header){
+        return userService.getAllinfo(header);
+    }
+
 }

@@ -18,7 +18,7 @@ public class coinModel implements Serializable {
     private String id; // "BTC", "ETH"
 
     @Column(nullable = false)
-    private String name;
+    private String symbol;
 
     @Column(name = "current_price", precision = 20, scale = 6)
     private BigDecimal currentPrice;

@@ -7,15 +7,15 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
-import api.exchange.models.TransactionFunding;
-import api.exchange.repository.TransactionFundingRepository;
+import api.exchange.models.FundingWalletHistory;
+import api.exchange.repository.FundingWalletHistoryRepository;
 import api.exchange.sercurity.jwt.JwtUtil;
 
 @Service
-public class TransactionFundingService {
+public class FundingWalletHistoryService {
 
     @Autowired
-    private TransactionFundingRepository transactionFundingRepository;
+    private FundingWalletHistoryRepository fundingWalletHistoryRepository;
 
     @Autowired
     private JwtUtil jwtUtil;
@@ -26,8 +26,8 @@ public class TransactionFundingService {
             // Get user information
             String uid = jwtUtil.getUserIdFromToken(token);
 
-            List<TransactionFunding> listTxFunding = new ArrayList<>();
-            listTxFunding = transactionFundingRepository.findByUserId(uid);
+            List<FundingWalletHistory> listTxFunding = new ArrayList<>();
+            listTxFunding = fundingWalletHistoryRepository.findByUserId(uid);
             return ResponseEntity.ok(Map.of("message", "success", "data", listTxFunding));
         } catch (Exception e) {
             return ResponseEntity.internalServerError()

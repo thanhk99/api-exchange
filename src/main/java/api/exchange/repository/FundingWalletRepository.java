@@ -1,5 +1,7 @@
 package api.exchange.repository;
 
+import java.util.List;
+
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -11,5 +13,9 @@ public interface FundingWalletRepository extends JpaRepository<FundingWallet, Lo
     FundingWallet findByUid(String uid);
 
     FundingWallet findByUidAndCurrency(String uid, String currency);
+
+    List<FundingWallet> findAllByUid(String uid);
+
+    // FundingWallet findByUidAndCurrency(String uid, String currency);
 
 }

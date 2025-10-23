@@ -1,8 +1,6 @@
 package api.exchange.models;
 
 import java.math.BigDecimal;
-import java.util.List;
-
 import jakarta.persistence.*;
 import lombok.*;
 

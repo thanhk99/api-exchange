@@ -25,6 +25,12 @@ public class refreshToken {
     @Column(nullable = false, unique = true)
     private String token;
 
+    @Column(name = "device_id" , nullable = false)
+    private String deviceId;
+
+    @Column(name = "last_used_at" , nullable =  false)
+    private LocalDateTime lastUsedAt;
+
     @Column(nullable = false)
     private LocalDateTime expiresAt;
 }

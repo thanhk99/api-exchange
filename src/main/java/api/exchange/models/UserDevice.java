@@ -1,7 +1,6 @@
 package api.exchange.models;
 
-import java.time.Instant;
-
+import java.time.LocalDateTime;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -34,10 +33,10 @@ public class UserDevice {
     private String location; // Tùy chọn
 
     @Column(nullable = false)
-    private Instant lastLoginAt;
+    private LocalDateTime lastLoginAt;
 
     @Column(nullable = true)
-    private Instant LogoutAt;
+    private LocalDateTime LogoutAt;
 
     private String browserName;
 

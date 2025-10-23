@@ -19,4 +19,6 @@ public interface UserDeviceRepository extends JpaRepository<UserDevice, Long> {
 
     List<UserDevice> findByUser_UidAndIsActive(String userId, Boolean isActive);
 
+    UserDevice findByUser(User user);
+
 }

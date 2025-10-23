@@ -7,14 +7,14 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import api.exchange.services.TransactionFundingService;
+import api.exchange.services.FundingWalletHistoryService;
 
 @RestController
 @RequestMapping("api/v1/txfunding")
 public class TransactionFundingController {
 
     @Autowired
-    private TransactionFundingService transactionFundingService;
+    private FundingWalletHistoryService transactionFundingService;
 
     @GetMapping("getAll")
     public ResponseEntity<?> getAll(@RequestHeader("Authorization") String authHeader) {

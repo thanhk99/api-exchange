@@ -18,9 +18,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.server.ResponseStatusException;
 
 import api.exchange.dtos.Requset.LoginRequest;
+import api.exchange.dtos.Requset.RefreshTokenRequest;
 import api.exchange.dtos.Requset.SignupRequest;
 import api.exchange.dtos.Response.AuthResponse;
-import api.exchange.dtos.Response.RefreshTokenRequest;
 import api.exchange.models.User;
 import api.exchange.models.UserDevice;
 import api.exchange.models.refreshToken;
@@ -83,8 +83,8 @@ public class AuthService {
             User user = new User();
             user.setUsername(signupRequest.getUsername());
             user.setEmail(signupRequest.getEmail());
-            user.setPassword(passwordEncoder.encode(signupRequest.getPassword()));
-            user.setRoles("USER");
+            user.setPassword(passwordEncoder.encode(signupRequest.getPassword()));  
+            user.setCreatedAt(LocalDateTime.now());
             user.setNation(signupRequest.getNation());
 
             User savedUser = userRepository.save(user);
@@ -125,19 +125,20 @@ public class AuthService {
             }
 
             UserDevice device = deviceService.saveDeviceInfo(user, request);
+            String deviceId = device.getDeviceId();
             LocalDateTime lastLogin = LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh"));
             user.setLastLogin(lastLogin);
             String accessToken = jwtUtil.generateAccessToken(user);
-            refreshToken refreshToken = jwtUtil.generateRefreshToken(user);
+            refreshToken refreshToken = jwtUtil.generateRefreshToken(user, deviceId);
             Map<String, Object> deviceRespone = deviceService.buildDeviceResponse(device);
 
-            return ResponseEntity.ok(
+            return ResponseEntity.ok(Map.of("message", "success", "data",
                     new AuthResponse(
                             accessToken,
                             refreshToken.getToken(),
                             user.getUid(),
                             user.getEmail(),
-                            deviceRespone));
+                            deviceRespone)));
 
         } catch (BadCredentialsException e) {
             return ResponseEntity
@@ -160,21 +161,17 @@ public class AuthService {
             }
 
             refreshToken refreshToken = refreshTokenRepository.findByToken(requestRefreshToken);
-            if (refreshToken == null) {
-                new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Refresh token not found");
+            String deviceId = refreshToken.getDeviceId();
+            if (refreshToken.getExpiresAt().isBefore(LocalDateTime.now())) {
+                refreshTokenRepository.delete(refreshToken);
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "refresh token expried"));
             }
-
-            // if (refreshToken.getExpiresAt().isBefore(Instant.now())) {
-            // refreshTokenRepository.delete(refreshToken);
-            // throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Refresh token
-            // expired");
-            // }
             refreshTokenRepository.delete(refreshToken);
 
             // Tạo token mới
             User user = refreshToken.getUser();
             String newAccessToken = jwtUtil.generateAccessToken(user);
-            refreshToken newRefreshToken = jwtUtil.generateRefreshToken(user);
+            refreshToken newRefreshToken = jwtUtil.generateRefreshToken(user, deviceId);
 
             // Trả về response
             return ResponseEntity.ok(
@@ -188,7 +185,7 @@ public class AuthService {
         } catch (ResponseStatusException e) {
             throw e; // Re-throw các lỗi đã được định nghĩa
         } catch (Exception e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to refresh token");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "refresh token expried"));
         }
     }
 

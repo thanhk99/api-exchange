@@ -28,4 +28,12 @@ public class FundingWallet {
     private BigDecimal lockedBalance = BigDecimal.ZERO;
 
     private boolean isActive = true;
+
+    public BigDecimal getAvailableBalance() {
+        return balance.subtract(lockedBalance != null ? lockedBalance : BigDecimal.ZERO);
+    }
+    
+    public BigDecimal getTotalBalance() {
+        return balance.add(lockedBalance != null ? lockedBalance : BigDecimal.ZERO);
+    }
 }
