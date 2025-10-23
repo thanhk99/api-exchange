@@ -43,10 +43,10 @@ public class TransactionSpot {
     private Long sellerOrderId;
 
     @Column(nullable = false)
-    private Long buyerId;
+    private String buyerId;
 
     @Column(nullable = false)
-    private Long sellerId;
+    private String sellerId;
 
     @Column(precision = 18, scale = 8)
     private BigDecimal fee;

@@ -28,7 +28,7 @@ public class OrderMatchService {
     public void handleNewOrder(OrderCreatedEvent event) {
         OrderBooks newOrderBooks = event.getOrder();
         log.info("🎯 Auto-matching triggered for order: {} ", newOrderBooks.getId());
-        orderBooksService.matchOrders(newOrderBooks.getSymbol());
+        orderBooksService.matchOrders(newOrderBooks);
         orderMatchingSchedule.scheduleMatching(newOrderBooks.getSymbol());
     }
 

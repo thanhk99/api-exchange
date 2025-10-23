@@ -1,4 +1,4 @@
-package api.exchange.dtos.Response;
+package api.exchange.dtos.Requset;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;

@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
+import api.exchange.dtos.Response.UserFullInfoResponse;
 import api.exchange.dtos.Response.UserInfoResponse;
 import api.exchange.models.User;
 import api.exchange.repository.UserRepository;
@@ -24,7 +25,7 @@ public class UserService {
         String token = authHeader.substring(7);
         String userId = jwtUtil.getUserIdFromToken(token);
         User user = userRepository.findByUid(userId);
-        return ResponseEntity.ok(Map.of("message","success","data",
+        return ResponseEntity.ok(Map.of("message", "success", "data",
                 new UserInfoResponse(
                         user.getUid(),
                         user.getEmail(),
@@ -50,4 +51,21 @@ public class UserService {
             return ResponseEntity.internalServerError().body(Map.of("message", "ERROR_SERVER"));
         }
     }
+
+    public ResponseEntity<?> getAllinfo(String header) {
+        String token = header.substring(7);
+        String userId = jwtUtil.getUserIdFromToken(token);
+        User user = userRepository.findByUid(userId);
+        return ResponseEntity.ok(Map.of("message", "success", "data", new UserFullInfoResponse(
+                user.getUid(),
+                user.getEmail(),
+                user.getUsername(),
+                user.getUserStatus(),
+                user.getNation(),
+                user.getKycStatus(),
+                user.getUserLevel(),
+                user.getPhone(),
+                "Nguời dùng thông thường ")));
+    }
+
 }

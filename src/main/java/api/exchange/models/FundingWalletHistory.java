@@ -12,8 +12,8 @@ import lombok.NoArgsConstructor;
 @Entity
 @NoArgsConstructor
 @AllArgsConstructor
-@Table(name = "funding_transactions")
-public class TransactionFunding {
+@Table(name = "funding_wallet_historys")
+public class FundingWalletHistory {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
