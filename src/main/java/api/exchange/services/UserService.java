@@ -60,10 +60,11 @@ public class UserService {
                 user.getUid(),
                 user.getEmail(),
                 user.getUsername(),
-                user.isVerified(),
+                user.getUserStatus(),
                 user.getNation(),
-                user.isActive(),
-                "0787107821",
+                user.getKycStatus(),
+                user.getUserLevel(),
+                user.getPhone(),
                 "Nguời dùng thông thường ")));
     }
 

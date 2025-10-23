@@ -21,7 +21,6 @@ public class KlineDataScheduler {
 
         try {
             coinDataService.fetchAndSaveAllKlineData1m();
-            System.out.println("✅ 1m data fetch completed");
         } catch (Exception e) {
             System.err.println("❌ Error in 1m data fetch: " + e.getMessage());
         }
@@ -37,7 +36,6 @@ public class KlineDataScheduler {
 
         try {
             coinDataService.fetchAndSaveAllKlineData1h();
-            System.out.println("✅ 1h data fetch completed");
         } catch (Exception e) {
             System.err.println("❌ Error in 1h data fetch: " + e.getMessage());
         }
@@ -49,20 +47,16 @@ public class KlineDataScheduler {
      */
     @Scheduled(initialDelay = 30000, fixedDelay = Long.MAX_VALUE)
     public void fetchInitialData() {
-        System.out.println("🔄 Fetching initial data at: " + java.time.LocalDateTime.now());
 
         try {
             // Lấy thông tin coin ban đầu
             coinDataService.fetchAndSaveAllCoinInfo();
-            System.out.println("✅ Initial coin info fetch completed");
 
             // Lấy dữ liệu 1m ban đầu
             coinDataService.fetchAndSaveAllKlineData1m();
-            System.out.println("✅ Initial 1m data fetch completed");
 
             // Lấy dữ liệu 1h ban đầu
             coinDataService.fetchAndSaveAllKlineData1h();
-            System.out.println("✅ Initial 1h data fetch completed");
 
         } catch (Exception e) {
             System.err.println("❌ Error in initial data fetch: " + e.getMessage());

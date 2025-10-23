@@ -230,7 +230,6 @@ public class CoinDataService {
 
                 if (!klines.isEmpty()) {
                     saveKlineData1m(klines);
-                    System.out.println("✅ Fetched and saved " + klines.size() + " klines 1m for " + symbol);
                 } else {
                     System.out.println("⚠️ No kline data available for " + symbol + " 1m from Binance");
                 }
@@ -253,7 +252,6 @@ public class CoinDataService {
 
                 if (!klines.isEmpty()) {
                     saveKlineData1h(klines);
-                    System.out.println("✅ Fetched and saved " + klines.size() + " klines 1h for " + symbol);
                 } else {
                     System.out.println("⚠️ No kline data available for " + symbol + " 1h from Binance");
                 }
@@ -288,7 +286,6 @@ public class CoinDataService {
                 coin.setLastUpdated(LocalDateTime.now());
                 coinRepository.save(coin);
 
-                System.out.println("✅ Fetched and saved coin info for " + symbol);
             }
         } catch (Exception e) {
             System.err.println("❌ Error fetching coin info for " + symbol + ": " + e.getMessage());

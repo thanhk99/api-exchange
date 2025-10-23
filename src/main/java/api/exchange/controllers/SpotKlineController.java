@@ -18,15 +18,9 @@ public class SpotKlineController {
 
     @Autowired
     private KlineCalculationService klineCalculationService;
-
-    /**
-     * Lấy dữ liệu kline của một symbol với khoảng thời gian cụ thể
-     * 
-     * @param symbol   Symbol cần lấy dữ liệu (ví dụ: BTCUSDT)
-     * @param interval Khoảng thời gian (1m, 5m, 15m, 1h, 6h, 12h)
-     * @param limit    Số lượng nến cần lấy (mặc định 72)
-     * @return Danh sách dữ liệu kline
-     */
+    
+    // Lấy dữ liệu kline của một symbol với khoảng thời gian cụ thể
+    
     @PostMapping("/symbol")
     public ResponseEntity<Map<String, Object>> getKlineData(@RequestBody SpotKlineRequest request,
             @RequestParam(defaultValue = "72") int limit) {

@@ -21,8 +21,6 @@ public class RingBufferService {
 
     /**
      * Thêm dữ liệu kline mới vào RingBuffer của symbol tương ứng
-     * 
-     * @param klineData Dữ liệu kline mới
      */
     public void addKlineData(KlinesSpotResponse klineData) {
         if (klineData == null || klineData.getSymbol() == null) {
@@ -44,9 +42,6 @@ public class RingBufferService {
 
     /**
      * Lấy tất cả dữ liệu kline của một symbol
-     * 
-     * @param symbol Symbol cần lấy dữ liệu
-     * @return Danh sách dữ liệu kline (tối đa 72 nến)
      */
     public List<KlinesSpotResponse> getKlineData(String symbol) {
         if (symbol == null) {

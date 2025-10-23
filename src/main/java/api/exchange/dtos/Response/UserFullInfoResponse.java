@@ -1,5 +1,8 @@
 package api.exchange.dtos.Response;
 
+import api.exchange.models.User.KycStatus;
+import api.exchange.models.User.UserLevel;
+import api.exchange.models.User.UserStatus;
 import lombok.*;
 
 @Data
@@ -12,9 +15,10 @@ public class UserFullInfoResponse {
     private String uid;
     private String email;
     private String username;
-    private boolean isVerified;
+    private UserStatus userStatus;
     private String nation;
-    private boolean isActive;
+    private KycStatus kycStatus;
+    private UserLevel userLevel;
     private String phoneNumber;
     private String leveFee ;
     
