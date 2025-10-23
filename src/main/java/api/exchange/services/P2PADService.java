@@ -86,6 +86,9 @@ public class P2PADService {
             String name = userRepository.findById(p2pAd.getUserId()).get().getUsername();
             BigDecimal totalTransfer = transactionsAdsRepository.countTotalTransactions((p2pAd.getUserId()));
             BigDecimal doneTransfer = transactionsAdsRepository.countCompletedTransactions(p2pAd.getUserId());
+            if(totalTransfer == null || totalTransfer.compareTo(BigDecimal.ZERO) == 0){
+                totalTransfer = BigDecimal.ONE;
+            }
             BigDecimal percentComplete = doneTransfer.divide(totalTransfer, 4, RoundingMode.HALF_UP).multiply(new BigDecimal(100));
             UserP2PResponse userP2PResponse = new UserP2PResponse(
                     p2pAd.getId(),
