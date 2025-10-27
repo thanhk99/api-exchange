@@ -5,7 +5,7 @@ import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-
+import jakarta.annotation.PreDestroy;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
@@ -38,6 +38,11 @@ public class OrderBatchProcessor  {
             scheduler.scheduleAtFixedRate(this::flushBatches, FLUSH_INTERVAL, FLUSH_INTERVAL, TimeUnit.MILLISECONDS);
         }
         
+        @PreDestroy
+        public void shutdown(){
+            scheduler.shutdown();
+        }
+
         // Add order to batch queue
         public void addOrderToBatch(OrderBooks order) {
             synchronized (orderBatch) {
@@ -66,7 +71,9 @@ public class OrderBatchProcessor  {
                 } catch (Exception e) {
                     log.error("❌ Failed to save order batch, re-queueing", e);
                     // Re-queue failed batch
-                    batchToSave.forEach(this::addOrderToBatch);
+                    synchronized (orderBatch) {
+                        orderBatch.addAll(0, batchToSave);
+                    }
                 }
             }
         }

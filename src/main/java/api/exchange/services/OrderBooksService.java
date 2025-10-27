@@ -309,23 +309,23 @@ public class OrderBooksService {
     private void createTradeRecord(OrderBooks newOrder, OrderBooks oppositeOrder, String oppositeKey,BigDecimal mathQuality,BigDecimal tradePrice) {
         try {
             TransactionSpot transactionSpot = new TransactionSpot();
-            if(newOrder.getOrderType().equals(OrderType.BUY)){
+            if(newOrder.isBuyOrder()){
                 transactionSpot.setBuyerId(newOrder.getUid());
                 transactionSpot.setBuyerOrderId(newOrder.getId());
                 transactionSpot.setSellerId(oppositeOrder.getUid());
                 transactionSpot.setSellerOrderId(oppositeOrder.getId());
             }else{
-                transactionSpot.setSellerId(oppositeOrder.getUid());
-                transactionSpot.setSellerOrderId(oppositeOrder.getId());
-                transactionSpot.setBuyerOrderId(newOrder.getId());
-                transactionSpot.setBuyerId(newOrder.getUid());
+                transactionSpot.setSellerId(newOrder.getUid());
+                transactionSpot.setSellerOrderId(newOrder.getId());
+                transactionSpot.setBuyerOrderId(oppositeOrder.getId());
+                transactionSpot.setBuyerId(oppositeOrder.getUid());
             }
             transactionSpot.setSymbol(newOrder.getSymbol());
             transactionSpot.setQuantity(mathQuality);
             transactionSpot.setPrice(tradePrice);
             transactionSpotRepository.save(transactionSpot);
         } catch (Exception e) {
-            log.error(oppositeKey, e);
+             log.error("Error creating trade record for key {}:", oppositeKey, e);
         }
     }
     public BigDecimal getLastTradedPrice(String symbol) {

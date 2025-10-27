@@ -104,12 +104,18 @@ public class SpotService {
 
     @Transactional
     public ResponseEntity<?> cancleOrder(Long orderId) {
-        Optional<OrderBooks> orderBooks = orderBooksRepository.findById(orderId);
-        if (!orderBooks.isPresent()) {
+        Optional<OrderBooks> orderOpt = orderBooksRepository.findById(orderId);
+        if (!orderOpt.isPresent()) {
             return ResponseEntity.badRequest().body(Map.of("message", "Bad Request", "data", "Không tìm thấy id"));
         }
-        if (orderBooks.get().getStatus() == OrderStatus.ACTIVE) {
-            return ResponseEntity.ok(Map.of("message", "success", "data", "Huỷ lệnh thành công"));
+
+        OrderBooks order = orderOpt.get();
+
+        if (orderOpt.get().getStatus() == OrderStatus.ACTIVE || order.getStatus() == OrderStatus.PARTIALLY_FILLED){ 
+        // For example: unlockBalance(order);
+        order.setStatus(OrderStatus.CANCELLED);
+        order.setUpdatedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
+        orderBooksRepository.save(order);
         }
         return ResponseEntity.badRequest().body(Map.of("message", "Bad Request", "data", "Không thể huỷ lệnh "));
     }
