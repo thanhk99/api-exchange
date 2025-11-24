@@ -23,7 +23,6 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class OrderBooksService {
 
-
     @Autowired
     private OrderBooksRepository orderBooksRepository;
 
@@ -37,12 +36,14 @@ public class OrderBooksService {
     private SpotWalletHistoryRepository spotWalletHistoryRepository;
 
     @Autowired
-    private TransactionSpotRepository transactionSpotRepository ;
+    private TransactionSpotRepository transactionSpotRepository;
+
+    @Autowired
+    private SpotWalletService spotWalletService;
 
     public void addOrderToRedis(OrderBooks order) {
-        String key  = order.isBuyOrder() ? "buyOrders:" + order.getSymbol() : "sellOrders:" + order.getSymbol();
-        double score = order.isMarketOrder() ? 0 : 
-        order.getPrice().doubleValue() * (order.isBuyOrder() ? -1 : 1);
+        String key = order.isBuyOrder() ? "buyOrders:" + order.getSymbol() : "sellOrders:" + order.getSymbol();
+        double score = order.isMarketOrder() ? 0 : order.getPrice().doubleValue() * (order.isBuyOrder() ? -1 : 1);
         redisTemplate.opsForZSet().add(key, order, score);
         log.info("➕ Added order to Redis: {} with score {}", order.getId(), score);
     }
@@ -50,93 +51,131 @@ public class OrderBooksService {
     @Transactional
     public void matchOrders(OrderBooks newOrder) {
         log.info("🔍 Starting matching for order ID: {}", newOrder.getId());
-        
+
         if (newOrder.isFullyFilled()) {
             log.info("🟡 Order {} already fully filled", newOrder.getId());
             return;
         }
-        
+
         String oppositeKey = getOppositeOrderKey(newOrder);
         Set<OrderBooks> oppositeOrders = getOppositeOrdersFromRedis(oppositeKey);
-        
+
         if (oppositeOrders.isEmpty()) {
             addOrderToRedis(newOrder);
             log.info("📥 No opposite orders, added to Redis. Order ID: {}", newOrder.getId());
             return;
         }
-        
+
         log.info("🔍 Matching order {} with {} opposite orders", newOrder.getId(), oppositeOrders.size());
-        
+
         // Sử dụng iterator để tránh concurrent modification
         Iterator<OrderBooks> iterator = oppositeOrders.iterator();
         while (iterator.hasNext() && !newOrder.isFullyFilled()) {
             OrderBooks oppositeOrder = iterator.next();
-            
+
             if (!isValidOrder(oppositeOrder)) {
                 log.warn("⚠️ Skipping invalid order from Redis: {}", oppositeOrder.getId());
                 continue;
             }
-            
+
             if (canMatch(newOrder, oppositeOrder)) {
                 // THÊM: Lấy order mới nhất từ DB trước khi khớp
                 OrderBooks freshOppositeOrder = orderBooksRepository.findById(oppositeOrder.getId())
-                    .orElse(oppositeOrder);
-                
+                        .orElse(oppositeOrder);
+
                 executeTrade(newOrder, freshOppositeOrder, oppositeKey);
             }
         }
-        
+
         handleOrderAfterMatching(newOrder);
     }
-    
 
     private void executeTrade(OrderBooks newOrder, OrderBooks oppositeOrder, String oppositeKey) {
         // Tính toán match quantity dựa trên remaining quantity thực tế
         BigDecimal newOrderRemaining = newOrder.getRemainingQuantity();
         BigDecimal oppositeRemaining = oppositeOrder.getRemainingQuantity();
         BigDecimal matchQuantity = newOrderRemaining.min(oppositeRemaining);
-        
+
         BigDecimal tradePrice = calculateTradePrice(newOrder, oppositeOrder);
-        
-        log.info("🎯 Executing trade: {} units at {} between order {} (rem: {}) and order {} (rem: {})", 
-                matchQuantity, tradePrice, 
+
+        log.info("🎯 Executing trade: {} units at {} between order {} (rem: {}) and order {} (rem: {})",
+                matchQuantity, tradePrice,
                 newOrder.getId(), newOrderRemaining,
                 oppositeOrder.getId(), oppositeRemaining);
-        
+
         // Cập nhật filled quantity - cộng dồn
         newOrder.setFilledQuantity(newOrder.getFilledQuantity().add(matchQuantity));
         oppositeOrder.setFilledQuantity(oppositeOrder.getFilledQuantity().add(matchQuantity));
-        
+
         log.info("📊 After trade - Order {}: filled {}/{}, Order {}: filled {}/{}",
                 newOrder.getId(), newOrder.getFilledQuantity(), newOrder.getQuantity(),
                 oppositeOrder.getId(), oppositeOrder.getFilledQuantity(), oppositeOrder.getQuantity());
-        
+
         // Cập nhật trạng thái
         updateOrderStatus(newOrder);
         updateOrderStatus(oppositeOrder);
-        
-        // Cập nhật opposite order trong Redis và DB 
+
+        // Cập nhật opposite order trong Redis và DB
         updateOrderInRedisAndDB(oppositeOrder, oppositeKey);
-        
+
         // Tạo trade record
-        createTradeRecord(newOrder,oppositeOrder,oppositeKey,matchQuantity,tradePrice);
-        
+        createTradeRecord(newOrder, oppositeOrder, oppositeKey, matchQuantity, tradePrice);
+
+        // Execute Trade in Wallets (Transfer funds)
+        try {
+            // Determine buyer and seller
+            String buyerUid = newOrder.isBuyOrder() ? newOrder.getUid() : oppositeOrder.getUid();
+            String sellerUid = newOrder.isBuyOrder() ? oppositeOrder.getUid() : newOrder.getUid();
+
+            // Determine TradeType for wallet logic
+            api.exchange.models.SpotHistory.TradeType walletTradeType;
+            if (newOrder.isMarketOrder() && oppositeOrder.isMarketOrder()) {
+                walletTradeType = api.exchange.models.SpotHistory.TradeType.MARKET_MARKET;
+            } else if (newOrder.isBuyOrder() && newOrder.isMarketOrder() && !oppositeOrder.isMarketOrder()) {
+                walletTradeType = api.exchange.models.SpotHistory.TradeType.MARKET_LIMIT_BUY;
+            } else if (!newOrder.isBuyOrder() && newOrder.isMarketOrder() && !oppositeOrder.isMarketOrder()) {
+                walletTradeType = api.exchange.models.SpotHistory.TradeType.MARKET_LIMIT_SELL;
+            } else if (!newOrder.isMarketOrder() && oppositeOrder.isMarketOrder()) {
+                if (newOrder.isBuyOrder()) {
+                    walletTradeType = api.exchange.models.SpotHistory.TradeType.MARKET_LIMIT_SELL;
+                } else {
+                    walletTradeType = api.exchange.models.SpotHistory.TradeType.MARKET_LIMIT_BUY;
+                }
+            } else {
+                walletTradeType = api.exchange.models.SpotHistory.TradeType.LIMIT_LIMIT;
+            }
+
+            // Calculate locked price (for Limit orders)
+            BigDecimal lockedPrice = BigDecimal.ZERO;
+            if (newOrder.isBuyOrder() && !newOrder.isMarketOrder()) {
+                lockedPrice = newOrder.getPrice();
+            } else if (oppositeOrder.isBuyOrder() && !oppositeOrder.isMarketOrder()) {
+                lockedPrice = oppositeOrder.getPrice();
+            }
+
+            spotWalletService.executeTradeSpot(sellerUid, buyerUid, tradePrice, matchQuantity, walletTradeType,
+                    newOrder.getSymbol(), lockedPrice);
+
+        } catch (Exception e) {
+            log.error("❌ Failed to execute wallet trade: {}", e.getMessage());
+        }
+
         log.info("✅ Trade executed successfully");
     }
 
     private void handleOrderAfterMatching(OrderBooks order) {
         updateOrderStatus(order);
-        
+
         if (order.isFullyFilled()) {
             log.info("✅ Order fully filled: {}", order.getId());
             // Không cần thêm vào Redis vì đã filled
         } else {
             // Order chưa filled hết, thêm vào Redis để chờ khớp tiếp
             addOrderToRedis(order);
-            log.info("🟡 Order partially filled, added to Redis: {} (filled: {}/{})", 
+            log.info("🟡 Order partially filled, added to Redis: {} (filled: {}/{})",
                     order.getId(), order.getFilledQuantity(), order.getQuantity());
         }
-        
+
         // Luôn cập nhật vào DB
         batchProcessor.addOrderToBatch(order);
     }
@@ -151,63 +190,62 @@ public class OrderBooksService {
         }
         order.setUpdatedAt(LocalDateTime.now());
     }
-    
+
     private String getOppositeOrderKey(OrderBooks order) {
         return order.isBuyOrder() ? "sellOrders:" + order.getSymbol() : "buyOrders:" + order.getSymbol();
     }
-    
-   private Set<OrderBooks> getOppositeOrdersFromRedis(String oppositeKey) {
+
+    private Set<OrderBooks> getOppositeOrdersFromRedis(String oppositeKey) {
         try {
             Set<OrderBooks> redisOrders = redisTemplate.opsForZSet().range(oppositeKey, 0, -1);
             if (redisOrders == null || redisOrders.isEmpty()) {
                 return new HashSet<>();
             }
-            
+
             // Tạo set mới với orders đã được refresh từ DB
             Set<OrderBooks> refreshedOrders = new HashSet<>();
             for (OrderBooks redisOrder : redisOrders) {
                 try {
                     // Lấy order mới nhất từ DB để có filled quantity chính xác
                     OrderBooks freshOrder = orderBooksRepository.findById(redisOrder.getId())
-                        .orElse(redisOrder);
+                            .orElse(redisOrder);
                     refreshedOrders.add(freshOrder);
                 } catch (Exception e) {
-                    log.warn("⚠️ Failed to refresh order {} from DB, using Redis version: {}", 
+                    log.warn("⚠️ Failed to refresh order {} from DB, using Redis version: {}",
                             redisOrder.getId(), e.getMessage());
                     refreshedOrders.add(redisOrder);
                 }
             }
-            
+
             return refreshedOrders;
-            
+
         } catch (Exception e) {
             log.error("❌ Error reading from Redis: {}", e.getMessage());
             return new HashSet<>();
         }
     }
-    
 
     private boolean isValidOrder(OrderBooks order) {
         if (order == null) {
             log.warn("⚠️ Order is null");
             return false;
         }
-        
+
         if (order.getId() == null) {
             log.warn("⚠️ Order has null ID: {}", order);
             return false;
         }
-        
+
         if (order.getQuantity() == null || order.getQuantity().compareTo(BigDecimal.ZERO) <= 0) {
             log.warn("⚠️ Order has invalid quantity: {}", order.getId());
             return false;
         }
-        
+
         if (order.isLimitOrder() && order.getPrice() == null) {
             log.warn("⚠️ Limit order has null price: {}", order.getId());
             return false;
         }
-        
+
         return true;
     }
 
@@ -239,14 +277,14 @@ public class OrderBooksService {
         }
     }
 
-   private void updateOrderInRedisAndDB(OrderBooks order, String redisKey) {
+    private void updateOrderInRedisAndDB(OrderBooks order, String redisKey) {
         try {
             // LUÔN cập nhật DB trước
             OrderBooks updatedOrder = orderBooksRepository.save(order);
-            log.info("💾 Order saved to DB: {} (filled: {}/{}, status: {})", 
-                    updatedOrder.getId(), updatedOrder.getFilledQuantity(), 
+            log.info("💾 Order saved to DB: {} (filled: {}/{}, status: {})",
+                    updatedOrder.getId(), updatedOrder.getFilledQuantity(),
                     updatedOrder.getQuantity(), updatedOrder.getStatus());
-            
+
             // Sau đó cập nhật Redis
             if (updatedOrder.isFullyFilled()) {
                 // Xóa khỏi Redis nếu đã filled hết
@@ -255,11 +293,11 @@ public class OrderBooksService {
             } else {
                 // Cập nhật order trong Redis với data mới nhất từ DB
                 updateOrderInRedis(redisKey, updatedOrder);
-                log.info("📝 Order updated in Redis: {} (filled: {}/{})", 
-                        updatedOrder.getId(), updatedOrder.getFilledQuantity(), 
+                log.info("📝 Order updated in Redis: {} (filled: {}/{})",
+                        updatedOrder.getId(), updatedOrder.getFilledQuantity(),
                         updatedOrder.getQuantity());
             }
-            
+
         } catch (Exception e) {
             log.error("❌ Failed to update order {}: {}", order.getId(), e.getMessage());
         }
@@ -267,20 +305,20 @@ public class OrderBooksService {
 
     private void updateOrderInRedis(String redisKey, OrderBooks order) {
         try {
-            //Xóa order cũ khỏi Redis
+            // Xóa order cũ khỏi Redis
             removeOrderFromRedis(redisKey, order);
-            
-            //Thêm order mới với filled quantity đã cập nhật
+
+            // Thêm order mới với filled quantity đã cập nhật
             Double score = calculateScore(order);
             redisTemplate.opsForZSet().add(redisKey, order, score);
-            
+
             log.debug("🔄 Order updated in Redis: {} with score {}", order.getId(), score);
-            
+
         } catch (Exception e) {
             log.error("❌ Failed to update order {} in Redis: {}", order.getId(), e.getMessage());
         }
     }
-    
+
     private void removeOrderFromRedis(String redisKey, OrderBooks orderToRemove) {
         try {
             Set<OrderBooks> ordersInRedis = redisTemplate.opsForZSet().range(redisKey, 0, -1);
@@ -306,15 +344,17 @@ public class OrderBooksService {
         double score = order.getPrice().doubleValue();
         return order.isBuyOrder() ? -score : score;
     }
-    private void createTradeRecord(OrderBooks newOrder, OrderBooks oppositeOrder, String oppositeKey,BigDecimal mathQuality,BigDecimal tradePrice) {
+
+    private void createTradeRecord(OrderBooks newOrder, OrderBooks oppositeOrder, String oppositeKey,
+            BigDecimal mathQuality, BigDecimal tradePrice) {
         try {
             TransactionSpot transactionSpot = new TransactionSpot();
-            if(newOrder.isBuyOrder()){
+            if (newOrder.isBuyOrder()) {
                 transactionSpot.setBuyerId(newOrder.getUid());
                 transactionSpot.setBuyerOrderId(newOrder.getId());
                 transactionSpot.setSellerId(oppositeOrder.getUid());
                 transactionSpot.setSellerOrderId(oppositeOrder.getId());
-            }else{
+            } else {
                 transactionSpot.setSellerId(newOrder.getUid());
                 transactionSpot.setSellerOrderId(newOrder.getId());
                 transactionSpot.setBuyerOrderId(oppositeOrder.getId());
@@ -325,9 +365,10 @@ public class OrderBooksService {
             transactionSpot.setPrice(tradePrice);
             transactionSpotRepository.save(transactionSpot);
         } catch (Exception e) {
-             log.error("Error creating trade record for key {}:", oppositeKey, e);
+            log.error("Error creating trade record for key {}:", oppositeKey, e);
         }
     }
+
     public BigDecimal getLastTradedPrice(String symbol) {
         // Trong thực tế, lấy từ database hoặc cache
         // Tạm thời return giá mặc định
