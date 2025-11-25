@@ -15,7 +15,7 @@ public class EarnWallet {
     private Long walletId;
 
     @Column(name = "uid", nullable = false)
-    private Long uid;
+    private String uid;
 
     // @ManyToOne
     // @JoinColumn(name = "product_id")
