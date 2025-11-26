@@ -40,14 +40,15 @@ public class P2PADController {
     }
 
     @PostMapping("order/{orderId}/confirm")
-    public ResponseEntity<?> confirmPayment(@PathVariable Long orderId,
+    public ResponseEntity<?> buyerConfirmPayment(@PathVariable Long orderId,
             @RequestHeader("Authorization") String authHeader) {
-        return p2pOrderService.confirmExternalPayment(orderId, authHeader);
+        return p2pOrderService.buyerConfirmPayment(orderId, authHeader);
     }
 
     @PostMapping("order/{orderId}/release")
-    public ResponseEntity<?> releaseCoins(@PathVariable Long orderId) {
-        return p2pOrderService.releaseCoins(orderId);
+    public ResponseEntity<?> sellerConfirmPayment(@PathVariable Long orderId,
+            @RequestHeader("Authorization") String authHeader) {
+        return p2pOrderService.sellerConfirmPaymentReceived(orderId, authHeader);
     }
 
     @GetMapping("order/{orderId}")
@@ -83,6 +84,21 @@ public class P2PADController {
     @GetMapping("/profile")
     public ResponseEntity<?> getProfileP2P(@RequestHeader("Authorization") String header) {
         return p2padService.profileUserP2P(header);
+    }
+
+    @GetMapping("/myads")
+    public ResponseEntity<?> getMyAds(@RequestHeader("Authorization") String authHeader) {
+        return p2padService.getUserAds(authHeader);
+    }
+
+    @GetMapping("/user/profile")
+    public ResponseEntity<?> getUserProfile(@RequestHeader("Authorization") String authHeader) {
+        return p2pOrderService.getUserProfile(authHeader);
+    }
+
+    @GetMapping("/user/history")
+    public ResponseEntity<?> getUserHistory(@RequestHeader("Authorization") String authHeader) {
+        return p2pOrderService.getUserTransactionHistory(authHeader);
     }
 
 }

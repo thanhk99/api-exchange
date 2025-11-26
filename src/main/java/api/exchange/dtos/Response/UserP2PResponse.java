@@ -22,7 +22,7 @@ public class UserP2PResponse {
     private BigDecimal availableAmount;
     private BigDecimal minAmount;
     private BigDecimal maxAmount;
-    private List<String> paymentMethods;
+    private List<api.exchange.models.PaymentMethod> paymentMethods;
     private String asset;
     private String fiatCurrency;
     private TradeType tradeType;

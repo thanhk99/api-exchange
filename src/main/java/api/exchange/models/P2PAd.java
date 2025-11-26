@@ -53,6 +53,9 @@ public class P2PAd {
     @Column(name = "payment_method", nullable = false)
     private List<String> paymentMethods = new ArrayList<>();
 
+    @Column(name = "payment_method_id")
+    private Long paymentMethodId;
+
     @Column(name = "terms_conditions", columnDefinition = "text")
     private String termsConditions;
 
