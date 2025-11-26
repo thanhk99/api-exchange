@@ -12,15 +12,19 @@ import api.exchange.models.P2PAd;
 import api.exchange.models.P2PAd.TradeType;
 import api.exchange.sercurity.jwt.JwtUtil;
 import api.exchange.services.P2PADService;
-import org.springframework.web.bind.annotation.GetMapping;
+import api.exchange.services.P2POrderService;
+import api.exchange.dtos.Request.OrderRequest;
 import org.springframework.web.bind.annotation.PathVariable;
 
+import org.springframework.web.bind.annotation.GetMapping;
 
 @RestController
 @RequestMapping("/api/v1/p2pads")
 public class P2PADController {
     @Autowired
     private P2PADService p2padService;
+    @Autowired
+    private P2POrderService p2pOrderService;
     @Autowired
     private JwtUtil jwtUtil;
 
@@ -29,11 +33,35 @@ public class P2PADController {
         return p2padService.createAddP2P(p2pAd, authHeader);
     }
 
+    @PostMapping("order")
+    public ResponseEntity<?> createOrder(@RequestBody OrderRequest request,
+            @RequestHeader("Authorization") String authHeader) {
+        return p2pOrderService.createOrder(request.getAdId(), request.getAmount(), authHeader);
+    }
+
+    @PostMapping("order/{orderId}/confirm")
+    public ResponseEntity<?> confirmPayment(@PathVariable Long orderId,
+            @RequestHeader("Authorization") String authHeader) {
+        return p2pOrderService.confirmExternalPayment(orderId, authHeader);
+    }
+
+    @PostMapping("order/{orderId}/release")
+    public ResponseEntity<?> releaseCoins(@PathVariable Long orderId) {
+        return p2pOrderService.releaseCoins(orderId);
+    }
+
+    @GetMapping("order/{orderId}")
+    public ResponseEntity<?> getOrderDetail(@PathVariable Long orderId,
+            @RequestHeader("Authorization") String authHeader) {
+        return p2pOrderService.getOrderDetail(orderId, authHeader);
+    }
+
     @GetMapping("getList/{type}")
     public ResponseEntity<?> getListP2PAds(@PathVariable TradeType type) {
         return p2padService.getListP2PAds(type);
     }
-     /**
+
+    /**
      * Endpoint để "Mở một tranh chấp (Khiếu nại)".
      * Cả người mua và người bán đều có thể gọi endpoint này.
      *
@@ -45,7 +73,7 @@ public class P2PADController {
     public ResponseEntity<?> openDispute(
             @PathVariable("id") Long transactionId,
             @RequestHeader("Authorization") String authHeader) {
-        
+
         String token = authHeader.substring(7);
         String userId = jwtUtil.getUserIdFromToken(token);
 
@@ -53,9 +81,8 @@ public class P2PADController {
     }
 
     @GetMapping("/profile")
-    public ResponseEntity<?>  getProfileP2P(@RequestHeader("Authorization") String header) {
+    public ResponseEntity<?> getProfileP2P(@RequestHeader("Authorization") String header) {
         return p2padService.profileUserP2P(header);
     }
-    
 
 }
