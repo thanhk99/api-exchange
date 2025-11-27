@@ -69,15 +69,14 @@ public class P2POrderService {
                         sellerId = takerId;
                 }
 
-                // Requirement: Buyer must have at least one payment method to buy from a SELL
-                // ad
-                // (When Taker is the Buyer)
-                if (ad.getTradeType() == P2PAd.TradeType.SELL) {
-                        long paymentMethodCount = paymentMethodRepository.countByUserIdAndIsActiveTrue(buyerId);
+                // Requirement: Seller must have at least one payment method to receive money
+                // If Ad is BUY -> Taker is Seller -> Check Taker's payment methods
+                if (ad.getTradeType() == P2PAd.TradeType.BUY) {
+                        long paymentMethodCount = paymentMethodRepository.countByUserIdAndIsActiveTrue(sellerId);
                         if (paymentMethodCount == 0) {
                                 return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                                                 .body(Map.of("message",
-                                                                "Vui lòng thêm tài khoản nhận tiền trước khi thực hiện giao dịch"));
+                                                                "Bạn cần thêm tài khoản nhận tiền trước khi bán coin"));
                         }
                 }
 
@@ -85,32 +84,29 @@ public class P2POrderService {
                         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                                         .body(Map.of("message", "Insufficient amount in ad"));
                 }
+                // Lock coins in Seller's Funding wallet
+                // If SELL Ad: Funds already locked when Ad was created.
+                // If BUY Ad: Taker is Seller, need to lock funds now.
+                if (ad.getTradeType() == P2PAd.TradeType.BUY) {
+                        FundingWallet sellerWallet = fundingWalletRepository.findByUidAndCurrency(sellerId,
+                                        ad.getAsset());
+                        if (sellerWallet == null) {
+                                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                                                .body(Map.of("message", "Seller wallet not found"));
+                        }
+                        if (sellerWallet.getBalance().compareTo(amount) < 0) {
+                                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                                                .body(Map.of("message", "Seller has insufficient balance"));
+                        }
+                        // Deduct from balance and add to locked
+                        sellerWallet.setBalance(sellerWallet.getBalance().subtract(amount));
+                        sellerWallet.setLockedBalance(sellerWallet.getLockedBalance().add(amount));
+                        fundingWalletRepository.save(sellerWallet);
+                }
+
                 // Reduce available amount on the ad
                 ad.setAvailableAmount(ad.getAvailableAmount().subtract(amount));
                 p2pAdRepository.save(ad);
-
-                // Lock coins in Seller's Funding wallet
-                // (If SELL Ad: Lock Advertiser's wallet. If BUY Ad: Lock Taker's wallet)
-                FundingWallet sellerWallet = fundingWalletRepository.findByUidAndCurrency(sellerId,
-                                ad.getAsset());
-                if (sellerWallet == null) {
-                        // If Taker is seller and has no wallet, we might need to handle it.
-                        // But usually they should have one if they are selling.
-                        // For now, return error.
-                        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                                        .body(Map.of("message", "Seller wallet not found"));
-                }
-                if (sellerWallet.getBalance().compareTo(amount) < 0) {
-                        // Rollback ad available amount
-                        ad.setAvailableAmount(ad.getAvailableAmount().add(amount));
-                        p2pAdRepository.save(ad);
-                        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                                        .body(Map.of("message", "Seller has insufficient balance"));
-                }
-                // Deduct from balance and add to locked
-                sellerWallet.setBalance(sellerWallet.getBalance().subtract(amount));
-                sellerWallet.setLockedBalance(sellerWallet.getLockedBalance().add(amount));
-                fundingWalletRepository.save(sellerWallet);
 
                 // Create order record
                 P2POrderDetail order = new P2POrderDetail();
@@ -191,7 +187,26 @@ public class P2POrderService {
                                 paymentMethodDetail.put("qrCode", pm.getQrCode());
                         });
                 } else {
-                        paymentMethodDetail.put("name", order.getPaymentMethod());
+                        // For BUY ads, Taker is Seller. Find their payment method matching the order
+                        // type.
+                        List<api.exchange.models.PaymentMethod> sellerMethods = paymentMethodRepository
+                                        .findByUserIdAndIsActiveTrue(order.getSellerId());
+
+                        // Find first method matching the type string in order.getPaymentMethod()
+                        sellerMethods.stream()
+                                        .filter(pm -> pm.getType().name().equals(order.getPaymentMethod()))
+                                        .findFirst()
+                                        .ifPresentOrElse(pm -> {
+                                                paymentMethodDetail.put("accountName", pm.getAccountName());
+                                                paymentMethodDetail.put("accountNumber", pm.getAccountNumber());
+                                                paymentMethodDetail.put("bankName", pm.getBankName());
+                                                paymentMethodDetail.put("branch", pm.getBranchName());
+                                                paymentMethodDetail.put("qrCode", pm.getQrCode());
+                                        }, () -> {
+                                                // Fallback if no specific method found (shouldn't happen given
+                                                // createOrder checks)
+                                                paymentMethodDetail.put("name", order.getPaymentMethod());
+                                        });
                 }
 
                 // Build order (ad) detail
@@ -397,5 +412,78 @@ public class P2POrderService {
                                 "code", 200,
                                 "message", "Success",
                                 "data", historyData));
+        }
+
+        /**
+         * Cancel a P2P order
+         * Security: Only buyer or seller can cancel their own order
+         * Business: Only orders in AWAITING_PAYMENT status can be cancelled
+         * Rollback: Unlock seller's coins and restore ad's available amount
+         */
+        @Transactional
+        public ResponseEntity<?> cancelOrder(Long orderId, String authHeader) {
+                // Authentication: Extract user ID from JWT token
+                String token = authHeader.substring(7);
+                String userId = jwtUtil.getUserIdFromToken(token);
+
+                // Find order or throw exception
+                P2POrderDetail order = orderRepository.findById(orderId)
+                                .orElseThrow(() -> new IllegalArgumentException("Order not found"));
+
+                // Authorization: Only buyer or seller can cancel the order
+                if (!order.getBuyerId().equals(userId) && !order.getSellerId().equals(userId)) {
+                        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                                        .body(Map.of("message", "You are not authorized to cancel this order"));
+                }
+
+                // State Validation: Only allow cancellation if order is in AWAITING_PAYMENT
+                // status
+                if (order.getStatus() != P2PTransactionStatus.AWAITING_PAYMENT) {
+                        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                                        .body(Map.of("message",
+                                                        "Cannot cancel order in current status: " + order.getStatus()));
+                }
+
+                // Get the ad and seller wallet for rollback
+                P2PAd ad = order.getAd();
+                FundingWallet sellerWallet = fundingWalletRepository.findByUidAndCurrency(
+                                order.getSellerId(), order.getAsset());
+
+                if (sellerWallet == null) {
+                        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                                        .body(Map.of("message", "Seller wallet not found"));
+                }
+
+                // Rollback 1: Unlock seller's coins
+                BigDecimal lockedAmount = order.getCryptoAmount();
+
+                // If SELL Ad: Funds belong to Ad, so keep them locked (do nothing here).
+                // If BUY Ad: Taker gets their funds back.
+                if (ad.getTradeType() == P2PAd.TradeType.BUY) {
+                        if (sellerWallet.getLockedBalance().compareTo(lockedAmount) < 0) {
+                                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                                                .body(Map.of("message", "Insufficient locked balance for rollback"));
+                        }
+
+                        sellerWallet.setLockedBalance(sellerWallet.getLockedBalance().subtract(lockedAmount));
+                        sellerWallet.setBalance(sellerWallet.getBalance().add(lockedAmount));
+                        fundingWalletRepository.save(sellerWallet);
+                }
+
+                // Rollback 2: Restore ad's available amount
+                ad.setAvailableAmount(ad.getAvailableAmount().add(lockedAmount));
+                p2pAdRepository.save(ad);
+
+                order.setStatus(P2PTransactionStatus.CANCELLED);
+                order.setCompletedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
+                orderRepository.save(order);
+
+                return ResponseEntity.ok(Map.of(
+                                "code", 200,
+                                "message", "Order cancelled successfully",
+                                "data", Map.of(
+                                                "orderId", order.getId(),
+                                                "status", order.getStatus().toString().toLowerCase(),
+                                                "cancelledAt", order.getCompletedAt().toString())));
         }
 }

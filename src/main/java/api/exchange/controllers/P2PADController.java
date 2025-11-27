@@ -33,6 +33,11 @@ public class P2PADController {
         return p2padService.createAddP2P(p2pAd, authHeader);
     }
 
+    @PostMapping("/{id}/cancel")
+    public ResponseEntity<?> cancelAd(@PathVariable Long id, @RequestHeader("Authorization") String authHeader) {
+        return p2padService.cancelAd(id, authHeader);
+    }
+
     @PostMapping("order")
     public ResponseEntity<?> createOrder(@RequestBody OrderRequest request,
             @RequestHeader("Authorization") String authHeader) {
@@ -49,6 +54,12 @@ public class P2PADController {
     public ResponseEntity<?> sellerConfirmPayment(@PathVariable Long orderId,
             @RequestHeader("Authorization") String authHeader) {
         return p2pOrderService.sellerConfirmPaymentReceived(orderId, authHeader);
+    }
+
+    @PostMapping("order/{orderId}/cancel")
+    public ResponseEntity<?> cancelOrder(@PathVariable Long orderId,
+            @RequestHeader("Authorization") String authHeader) {
+        return p2pOrderService.cancelOrder(orderId, authHeader);
     }
 
     @GetMapping("order/{orderId}")

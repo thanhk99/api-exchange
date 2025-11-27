@@ -112,6 +112,12 @@ public class P2PADService {
                     return ResponseEntity.badRequest()
                             .body(Map.of("message", "Số dư trong ví Funding của bạn không đủ "));
                 }
+
+                // Lock funds immediately for SELL ads
+                sellerWallet.setBalance(sellerWallet.getBalance().subtract(p2pAd.getAvailableAmount()));
+                sellerWallet.setLockedBalance(sellerWallet.getLockedBalance().add(p2pAd.getAvailableAmount()));
+                fundingWalletRepository.save(sellerWallet);
+
             } else {
                 // BUY Ad Logic: Must have list of paymentMethods (type of method to transfer
                 // money)
@@ -133,11 +139,53 @@ public class P2PADService {
             p2pAd.setCreatedAt(createDt);
             p2pAd.setExpiresAt(expiresAt);
             p2pAd.setUserId(uid);
+            p2pAd.setIsActive(true); // Ensure ad is active by default
             p2pAdRepository.save(p2pAd);
             return ResponseEntity.status(201).body(Map.of("message", "success", "data", p2pAd));
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
+    }
+
+    /**
+     * Cancel an Ad and unlock funds if it's a SELL ad.
+     */
+    @Transactional
+    public ResponseEntity<?> cancelAd(Long adId, String authHeader) {
+        String token = authHeader.substring(7);
+        String userId = jwtUtil.getUserIdFromToken(token);
+
+        P2PAd ad = p2pAdRepository.findById(adId)
+                .orElseThrow(() -> new IllegalArgumentException("Ad not found"));
+
+        if (!ad.getUserId().equals(userId)) {
+            return ResponseEntity.status(403).body(Map.of("message", "Unauthorized"));
+        }
+
+        if (!ad.getIsActive()) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Ad is already inactive"));
+        }
+
+        // If SELL Ad, unlock remaining available amount
+        if (ad.getTradeType() == TradeType.SELL) {
+            FundingWallet sellerWallet = fundingWalletRepository.findByUidAndCurrency(userId, ad.getAsset());
+            if (sellerWallet != null) {
+                BigDecimal amountToUnlock = ad.getAvailableAmount();
+                if (sellerWallet.getLockedBalance().compareTo(amountToUnlock) >= 0) {
+                    sellerWallet.setLockedBalance(sellerWallet.getLockedBalance().subtract(amountToUnlock));
+                    sellerWallet.setBalance(sellerWallet.getBalance().add(amountToUnlock));
+                    fundingWalletRepository.save(sellerWallet);
+                } else {
+                    // Log error or handle inconsistency
+                    System.err.println("CRITICAL: Locked balance inconsistent for user " + userId);
+                }
+            }
+        }
+
+        ad.setIsActive(false);
+        p2pAdRepository.save(ad);
+
+        return ResponseEntity.ok(Map.of("message", "Ad cancelled successfully"));
     }
 
     public ResponseEntity<?> getListP2PAds(TradeType type) {
