@@ -14,7 +14,9 @@ import api.exchange.sercurity.jwt.JwtUtil;
 import api.exchange.services.P2PADService;
 import api.exchange.services.P2POrderService;
 import api.exchange.dtos.Request.OrderRequest;
+import api.exchange.dtos.Request.UpdateAdRequest;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
 
 import org.springframework.web.bind.annotation.GetMapping;
 
@@ -36,6 +38,12 @@ public class P2PADController {
     @PostMapping("/{id}/cancel")
     public ResponseEntity<?> cancelAd(@PathVariable Long id, @RequestHeader("Authorization") String authHeader) {
         return p2padService.cancelAd(id, authHeader);
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<?> updateAd(@PathVariable Long id, @RequestBody UpdateAdRequest request,
+            @RequestHeader("Authorization") String authHeader) {
+        return p2padService.updateAd(id, request, authHeader);
     }
 
     @PostMapping("order")

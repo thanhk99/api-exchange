@@ -20,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -55,8 +56,83 @@ public class CoinDataService {
     @Value("${binance.api.url}")
     private String binanceApiUrl;
 
-    // Các symbols được theo dõi
-    private static final List<String> SYMBOLS = Arrays.asList("BTCUSDT", "ETHUSDT", "SOLUSDT");
+    // Các symbols được theo dõi (Top 25 phổ biến)
+    private static final List<String> SYMBOLS = Arrays.asList(
+            "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT",
+            "ADAUSDT", "DOGEUSDT", "TRXUSDT", "DOTUSDT", "SUIUSDT",
+            "LTCUSDT", "BCHUSDT", "LINKUSDT", "XLMUSDT", "ATOMUSDT",
+            "UNIUSDT", "AVAXUSDT", "NEARUSDT", "FILUSDT", "VETUSDT",
+            "ALGOUSDT", "ICPUSDT", "SHIBUSDT", "TONUSDT", "ETCUSDT");
+
+    // Mapping Symbol -> CoinGecko ID
+    private static final java.util.Map<String, String> COIN_GECKO_IDS = java.util.Map.ofEntries(
+            java.util.Map.entry("BTC", "bitcoin"),
+            java.util.Map.entry("ETH", "ethereum"),
+            java.util.Map.entry("BNB", "binancecoin"),
+            java.util.Map.entry("SOL", "solana"),
+            java.util.Map.entry("XRP", "ripple"),
+            java.util.Map.entry("ADA", "cardano"),
+            java.util.Map.entry("DOGE", "dogecoin"),
+            java.util.Map.entry("TRX", "tron"),
+            java.util.Map.entry("DOT", "polkadot"),
+            java.util.Map.entry("SUI", "sui"),
+            java.util.Map.entry("LTC", "litecoin"),
+            java.util.Map.entry("BCH", "bitcoin-cash"),
+            java.util.Map.entry("LINK", "chainlink"),
+            java.util.Map.entry("XLM", "stellar"),
+            java.util.Map.entry("ATOM", "cosmos"),
+            java.util.Map.entry("UNI", "uniswap"),
+            java.util.Map.entry("AVAX", "avalanche-2"),
+            java.util.Map.entry("NEAR", "near"),
+            java.util.Map.entry("FIL", "filecoin"),
+            java.util.Map.entry("VET", "vechain"),
+            java.util.Map.entry("ALGO", "algorand"),
+            java.util.Map.entry("ICP", "internet-computer"),
+            java.util.Map.entry("SHIB", "shiba-inu"),
+            java.util.Map.entry("TON", "the-open-network"),
+            java.util.Map.entry("ETC", "ethereum-classic"));
+
+    // Cache circulating supply: Symbol -> Supply
+    private java.util.Map<String, BigDecimal> circulatingSupplyCache = new java.util.concurrent.ConcurrentHashMap<>();
+
+    // Mapping logo URLs cho các coin (sử dụng CoinGecko CDN)
+    private static final java.util.Map<String, String> LOGO_URLS = java.util.Map.ofEntries(
+            java.util.Map.entry("BTC", "https://assets.coingecko.com/coins/images/1/large/bitcoin.png"),
+            java.util.Map.entry("ETH", "https://assets.coingecko.com/coins/images/279/large/ethereum.png"),
+            java.util.Map.entry("BNB", "https://assets.coingecko.com/coins/images/825/large/bnb-icon2_2x.png"),
+            java.util.Map.entry("SOL", "https://assets.coingecko.com/coins/images/4128/large/solana.png"),
+            java.util.Map.entry("XRP", "https://assets.coingecko.com/coins/images/44/large/xrp-symbol-white-128.png"),
+            java.util.Map.entry("ADA", "https://assets.coingecko.com/coins/images/975/large/cardano.png"),
+            java.util.Map.entry("DOGE", "https://assets.coingecko.com/coins/images/5/large/dogecoin.png"),
+            java.util.Map.entry("TRX", "https://assets.coingecko.com/coins/images/1094/large/tron-logo.png"),
+            java.util.Map.entry("DOT", "https://assets.coingecko.com/coins/images/12171/large/polkadot.png"),
+            java.util.Map.entry("SUI", "https://assets.coingecko.com/coins/images/26375/large/sui_asset.jpeg"),
+            java.util.Map.entry("LTC", "https://assets.coingecko.com/coins/images/2/large/litecoin.png"),
+            java.util.Map.entry("BCH", "https://assets.coingecko.com/coins/images/780/large/bitcoin-cash-circle.png"),
+            java.util.Map.entry("LINK", "https://assets.coingecko.com/coins/images/877/large/chainlink-new-logo.png"),
+            java.util.Map.entry("XLM",
+                    "https://assets.coingecko.com/coins/images/100/large/Stellar_symbol_black_RGB.png"),
+            java.util.Map.entry("ATOM", "https://assets.coingecko.com/coins/images/1481/large/cosmos_hub.png"),
+            java.util.Map.entry("UNI", "https://assets.coingecko.com/coins/images/12504/large/uni.jpg"),
+            java.util.Map.entry("AVAX",
+                    "https://assets.coingecko.com/coins/images/12559/large/Avalanche_Circle_RedWhite_Trans.png"),
+            java.util.Map.entry("NEAR", "https://assets.coingecko.com/coins/images/10365/large/near.jpg"),
+            java.util.Map.entry("FIL", "https://assets.coingecko.com/coins/images/12817/large/filecoin.png"),
+            java.util.Map.entry("VET", "https://assets.coingecko.com/coins/images/1167/large/VeChain-Logo-768x725.png"),
+            java.util.Map.entry("ALGO", "https://assets.coingecko.com/coins/images/4380/large/download.png"),
+            java.util.Map.entry("ICP",
+                    "https://assets.coingecko.com/coins/images/14495/large/Internet_Computer_logo.png"),
+            java.util.Map.entry("SHIB", "https://assets.coingecko.com/coins/images/11939/large/shiba.png"),
+            java.util.Map.entry("TON", "https://assets.coingecko.com/coins/images/17980/large/ton_symbol.png"),
+            java.util.Map.entry("ETC",
+                    "https://assets.coingecko.com/coins/images/453/large/ethereum-classic-logo.png"));
+
+    /**
+     * Lấy danh sách tất cả coin đang theo dõi kèm thông tin giá
+     */
+    public List<coinModel> getAllCoins() {
+        return coinRepository.findAll();
+    }
 
     /**
      * Lấy dữ liệu kline từ Binance API
@@ -276,12 +352,16 @@ public class CoinDataService {
             if (response.getStatusCode().is2xxSuccessful()) {
                 JsonNode jsonNode = objectMapper.readTree(response.getBody());
 
+                String coinId = symbol.replace("USDT", "");
                 coinModel coin = new coinModel();
-                coin.setId(symbol.replace("USDT", ""));
+                coin.setId(coinId);
                 coin.setSymbol(symbol);
 
                 coin.setCurrentPrice(new BigDecimal(jsonNode.get("lastPrice").asText()));
                 coin.setPriceChange24h(new BigDecimal(jsonNode.get("priceChangePercent").asText()));
+
+                // Set logo URL from mapping
+                coin.setLogoUrl(LOGO_URLS.getOrDefault(coinId, ""));
 
                 coin.setLastUpdated(LocalDateTime.now());
                 coinRepository.save(coin);
@@ -359,5 +439,116 @@ public class CoinDataService {
     public List<String> getSupportedIntervals() {
         return Arrays.asList("1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d", "3d", "1w",
                 "1M");
+    }
+
+    /**
+     * Lấy giá hiện tại của coin từ DB
+     */
+    public BigDecimal getCurrentPrice(String symbol) {
+        String normalizedSymbol = symbol.toUpperCase().replace("USDT", "");
+        if (normalizedSymbol.isEmpty() || "USDT".equals(normalizedSymbol)) {
+            return BigDecimal.ONE;
+        }
+
+        return coinRepository.findById(normalizedSymbol)
+                .map(coinModel::getCurrentPrice)
+                .orElse(BigDecimal.ZERO);
+    }
+
+    /**
+     * Lấy tỷ giá giữa hai đồng coin (from -> to).
+     * Rate = PriceFrom / PriceTo
+     */
+    public BigDecimal getExchangeRate(String fromSymbol, String toSymbol) {
+        BigDecimal priceFrom = getCurrentPrice(fromSymbol);
+        BigDecimal priceTo = getCurrentPrice(toSymbol);
+
+        if (priceTo.compareTo(BigDecimal.ZERO) == 0) {
+            return BigDecimal.ZERO;
+        }
+
+        return priceFrom.divide(priceTo, 8, RoundingMode.HALF_UP);
+    }
+
+    /**
+     * Lấy circulating supply từ cache
+     */
+    public BigDecimal getCirculatingSupply(String symbol) {
+        String coinId = symbol.toUpperCase().replace("USDT", "");
+        return circulatingSupplyCache.getOrDefault(coinId, BigDecimal.ZERO);
+    }
+
+    /**
+     * Fetch circulating supply từ CoinGecko và update cache + DB
+     * Chạy mỗi 10 phút
+     */
+    @Scheduled(fixedRate = 600000)
+    public void fetchAndSaveCoinSupply() {
+        System.out.println("🔄 Fetching circulating supply from CoinGecko...");
+
+        // Chia thành các batch nhỏ nếu cần, ở đây fetch hết 1 lần vì số lượng ít (25
+        // coin)
+        // CoinGecko API:
+        // /coins/markets?vs_currency=usd&ids=bitcoin,ethereum,...&order=market_cap_desc&per_page=100&page=1&sparkline=false&locale=en
+
+        try {
+            String ids = String.join(",", COIN_GECKO_IDS.values());
+            String url = "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=" + ids
+                    + "&order=market_cap_desc&per_page=100&page=1&sparkline=false&locale=en";
+
+            // Lưu ý: Cần handle rate limit của CoinGecko (Free tier: 10-30 calls/min)
+            // Có thể cần thêm header User-Agent để tránh bị block
+
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.set("User-Agent", "Mozilla/5.0");
+            org.springframework.http.HttpEntity<String> entity = new org.springframework.http.HttpEntity<>(headers);
+
+            ResponseEntity<String> response = restTemplate.exchange(url, org.springframework.http.HttpMethod.GET,
+                    entity, String.class);
+
+            if (response.getStatusCode().is2xxSuccessful()) {
+                JsonNode root = objectMapper.readTree(response.getBody());
+                if (root.isArray()) {
+                    for (JsonNode node : root) {
+                        String geckoId = node.path("id").asText();
+                        BigDecimal supply = new BigDecimal(node.path("circulating_supply").asText("0"));
+
+                        // Tìm symbol tương ứng với geckoId
+                        String symbol = COIN_GECKO_IDS.entrySet().stream()
+                                .filter(entry -> entry.getValue().equals(geckoId))
+                                .map(java.util.Map.Entry::getKey)
+                                .findFirst()
+                                .orElse(null);
+
+                        if (symbol != null) {
+                            // Update cache
+                            circulatingSupplyCache.put(symbol, supply);
+
+                            // Update DB (optional, nếu muốn persist)
+                            coinRepository.findById(symbol).ifPresent(coin -> {
+                                coin.setCirculatingSupply(supply);
+                                coinRepository.save(coin);
+                            });
+                        }
+                    }
+                }
+                System.out.println("✅ Circulating supply updated successfully.");
+            }
+        } catch (Exception e) {
+            System.err.println("❌ Error fetching circulating supply: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Khởi tạo cache từ DB khi start app
+     */
+    @jakarta.annotation.PostConstruct
+    public void initSupplyCache() {
+        List<coinModel> coins = coinRepository.findAll();
+        for (coinModel coin : coins) {
+            if (coin.getCirculatingSupply() != null) {
+                circulatingSupplyCache.put(coin.getId(), coin.getCirculatingSupply());
+            }
+        }
     }
 }

@@ -4,6 +4,7 @@ import api.exchange.models.P2PAd;
 import api.exchange.models.P2POrderDetail;
 import api.exchange.models.P2POrderDetail.P2PTransactionStatus;
 import api.exchange.models.FundingWallet;
+import api.exchange.models.Notification.NotificationType;
 import api.exchange.repository.P2PAdRepository;
 import api.exchange.repository.P2POrderDetailRepository;
 import api.exchange.repository.FundingWalletRepository;
@@ -40,6 +41,9 @@ public class P2POrderService {
 
         @Autowired
         private PaymentMethodRepository paymentMethodRepository;
+
+        @Autowired
+        private NotificationService notificationService;
 
         /**
          * Buyer creates an order on an existing ad.
@@ -131,6 +135,17 @@ public class P2POrderService {
                 order.setCreatedAt(createdAt);
                 order.setExpiresAt(createdAt.plusMinutes(15));
                 orderRepository.save(order);
+
+                // Send notification to the person receiving the order
+                String recipientId = ad.getTradeType() == P2PAd.TradeType.SELL ? sellerId : buyerId;
+                notificationService.createNotification(
+                                recipientId,
+                                "Đơn hàng P2P mới",
+                                "Bạn có đơn hàng " + ad.getTradeType().toString().toLowerCase() + " mới: "
+                                                + order.getCryptoAmount() + " " + order.getAsset()
+                                                + " với giá " + order.getFiatAmount() + " " + order.getFiatCurrency(),
+                                NotificationType.P2P_ORDER_CREATED,
+                                order.getId());
 
                 // Build detailed response for frontend
                 Map<String, Object> orderData = new HashMap<>();
@@ -279,6 +294,17 @@ public class P2POrderService {
 
                 order.setStatus(P2PTransactionStatus.PAYMENT_SENT);
                 orderRepository.save(order);
+
+                // Send notification to seller
+                notificationService.createNotification(
+                                order.getSellerId(),
+                                "Người mua đã thanh toán",
+                                "Người mua đã xác nhận chuyển tiền cho đơn hàng #" + orderId
+                                                + ". Số tiền: " + order.getFiatAmount() + " " + order.getFiatCurrency()
+                                                + ". Vui lòng kiểm tra và xác nhận.",
+                                NotificationType.P2P_PAYMENT_SENT,
+                                orderId);
+
                 return ResponseEntity.ok(Map.of("message", "Payment confirmation received"));
         }
 
@@ -341,6 +367,15 @@ public class P2POrderService {
                 order.setStatus(P2PTransactionStatus.COMPLETED);
                 order.setCompletedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
                 orderRepository.save(order);
+
+                // Send notification to buyer
+                notificationService.createNotification(
+                                order.getBuyerId(),
+                                "Giao dịch hoàn tất",
+                                "Người bán đã xác nhận nhận tiền. " + order.getCryptoAmount() + " "
+                                                + order.getAsset() + " đã được chuyển vào ví của bạn.",
+                                NotificationType.P2P_PAYMENT_CONFIRMED,
+                                order.getId());
 
                 return ResponseEntity.ok(Map.of(
                                 "message", "Payment confirmed and coins released",
@@ -477,6 +512,24 @@ public class P2POrderService {
                 order.setStatus(P2PTransactionStatus.CANCELLED);
                 order.setCompletedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
                 orderRepository.save(order);
+
+                // Send notification to both buyer and seller
+                String cancelMessage = "Đơn hàng #" + orderId + " đã bị hủy. "
+                                + "Số tiền: " + order.getFiatAmount() + " " + order.getFiatCurrency();
+
+                notificationService.createNotification(
+                                order.getBuyerId(),
+                                "Đơn hàng đã bị hủy",
+                                cancelMessage,
+                                NotificationType.P2P_ORDER_CANCELLED,
+                                orderId);
+
+                notificationService.createNotification(
+                                order.getSellerId(),
+                                "Đơn hàng đã bị hủy",
+                                cancelMessage,
+                                NotificationType.P2P_ORDER_CANCELLED,
+                                orderId);
 
                 return ResponseEntity.ok(Map.of(
                                 "code", 200,

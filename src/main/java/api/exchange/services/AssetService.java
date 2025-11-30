@@ -18,6 +18,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import api.exchange.dtos.Request.TransferRequest;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class AssetService {
@@ -129,5 +131,69 @@ public class AssetService {
         }
         Optional<coinModel> coinOpt = coinRepository.findById(currency);
         return coinOpt.map(coinModel::getCurrentPrice).orElse(BigDecimal.ZERO);
+    }
+
+    @Transactional
+    public void transferAsset(String uid, TransferRequest request) {
+        String from = request.getFromWallet().toUpperCase();
+        String to = request.getToWallet().toUpperCase();
+        String asset = request.getAsset().toUpperCase();
+        BigDecimal amount = request.getAmount();
+
+        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Amount must be greater than 0");
+        }
+
+        if (from.equals(to)) {
+            throw new IllegalArgumentException("Cannot transfer to the same wallet type");
+        }
+
+        if ("SPOT".equals(from) && "FUNDING".equals(to)) {
+            // SPOT -> FUNDING
+            SpotWallet spotWallet = spotWalletRepository.findByUidAndCurrency(uid, asset);
+            if (spotWallet == null || spotWallet.getBalance().compareTo(amount) < 0) {
+                throw new IllegalArgumentException("Insufficient balance in SPOT wallet");
+            }
+
+            FundingWallet fundingWallet = fundingWalletRepository.findByUidAndCurrency(uid, asset);
+            if (fundingWallet == null) {
+                fundingWallet = new FundingWallet();
+                fundingWallet.setUid(uid);
+                fundingWallet.setCurrency(asset);
+                fundingWallet.setBalance(BigDecimal.ZERO);
+                fundingWallet.setLockedBalance(BigDecimal.ZERO);
+            }
+
+            spotWallet.setBalance(spotWallet.getBalance().subtract(amount));
+            fundingWallet.setBalance(fundingWallet.getBalance().add(amount));
+
+            spotWalletRepository.save(spotWallet);
+            fundingWalletRepository.save(fundingWallet);
+
+        } else if ("FUNDING".equals(from) && "SPOT".equals(to)) {
+            // FUNDING -> SPOT
+            FundingWallet fundingWallet = fundingWalletRepository.findByUidAndCurrency(uid, asset);
+            if (fundingWallet == null || fundingWallet.getBalance().compareTo(amount) < 0) {
+                throw new IllegalArgumentException("Insufficient balance in FUNDING wallet");
+            }
+
+            SpotWallet spotWallet = spotWalletRepository.findByUidAndCurrency(uid, asset);
+            if (spotWallet == null) {
+                spotWallet = new SpotWallet();
+                spotWallet.setUid(uid);
+                spotWallet.setCurrency(asset);
+                spotWallet.setBalance(BigDecimal.ZERO);
+                spotWallet.setLockedBalance(BigDecimal.ZERO);
+            }
+
+            fundingWallet.setBalance(fundingWallet.getBalance().subtract(amount));
+            spotWallet.setBalance(spotWallet.getBalance().add(amount));
+
+            fundingWalletRepository.save(fundingWallet);
+            spotWalletRepository.save(spotWallet);
+
+        } else {
+            throw new IllegalArgumentException("Invalid wallet type. Use 'SPOT' or 'FUNDING'");
+        }
     }
 }

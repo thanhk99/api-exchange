@@ -31,4 +31,7 @@ public class coinModel implements Serializable {
 
     @Column(name = "logo_url")
     private String logoUrl;
+
+    @Column(name = "circulating_supply", precision = 20, scale = 2)
+    private BigDecimal circulatingSupply;
 }

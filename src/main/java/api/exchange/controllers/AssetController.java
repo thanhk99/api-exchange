@@ -3,9 +3,13 @@ package api.exchange.controllers;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import api.exchange.dtos.Request.TransferRequest;
 
 import api.exchange.sercurity.jwt.JwtUtil;
 import api.exchange.services.AssetService;
@@ -32,6 +36,25 @@ public class AssetController {
         try {
             Map<String, Object> data = assetService.getAssetOverview(uid);
             return ResponseEntity.ok(Map.of("message", "success", "data", data));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError()
+                    .body(Map.of("message", "SERVER_ERROR", "error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/transfer")
+    public ResponseEntity<?> transferAsset(@RequestBody TransferRequest request,
+            @RequestHeader("Authorization") String header) {
+        String jwt = header.substring(7);
+        String uid = jwtUtil.getUserIdFromToken(jwt);
+        if (uid == null) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Invalid token"));
+        }
+        try {
+            assetService.transferAsset(uid, request);
+            return ResponseEntity.ok(Map.of("message", "Transfer successful"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         } catch (Exception e) {
             return ResponseEntity.internalServerError()
                     .body(Map.of("message", "SERVER_ERROR", "error", e.getMessage()));

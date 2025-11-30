@@ -14,13 +14,16 @@ import api.exchange.dtos.Response.CoinSpotResponse;
 
 public class SpotMarketWebSocket extends WebSocketClient {
 
+    private final api.exchange.services.CoinDataService coinDataService;
     private final SimpMessagingTemplate messagingTemplate;
     private final ObjectMapper objectMapper;
 
-    public SpotMarketWebSocket(URI uri, SimpMessagingTemplate messagingTemplate, ObjectMapper objectMapper) {
+    public SpotMarketWebSocket(URI uri, SimpMessagingTemplate messagingTemplate, ObjectMapper objectMapper,
+            api.exchange.services.CoinDataService coinDataService) {
         super(uri);
         this.messagingTemplate = messagingTemplate;
         this.objectMapper = objectMapper;
+        this.coinDataService = coinDataService;
     }
 
     @Override
@@ -29,14 +32,11 @@ public class SpotMarketWebSocket extends WebSocketClient {
                 {
                     "method": "SUBSCRIBE",
                     "params": [
-                        "btcusdt@ticker",
-                        "ethusdt@ticker",
-                        "solusdt@ticker",
-                        "xrpusdt@ticker",
-                        "okbusdt@ticker",
-                        "bnbusdt@ticker",
-                        "adausdt@ticker",
-                        "dotusdt@ticker"
+                        "btcusdt@ticker", "ethusdt@ticker", "bnbusdt@ticker", "solusdt@ticker", "xrpusdt@ticker",
+                        "adausdt@ticker", "dogeusdt@ticker", "trxusdt@ticker", "dotusdt@ticker", "suiusdt@ticker",
+                        "ltcusdt@ticker", "bchusdt@ticker", "linkusdt@ticker", "xlmusdt@ticker", "atomusdt@ticker",
+                        "uniusdt@ticker", "avaxusdt@ticker", "nearusdt@ticker", "filusdt@ticker", "vetusdt@ticker",
+                        "algousdt@ticker", "icpusdt@ticker", "shibusdt@ticker", "tonusdt@ticker", "etcusdt@ticker"
                     ],
                     "id": 1
                 }
@@ -69,15 +69,21 @@ public class SpotMarketWebSocket extends WebSocketClient {
 
     private CoinSpotResponse filterData(JsonNode node) {
         String symbol = node.path("s").asText();
+        BigDecimal price = new BigDecimal(node.path("c").asText("0"));
+
+        // Calculate Market Cap
+        BigDecimal supply = coinDataService.getCirculatingSupply(symbol);
+        BigDecimal marketCap = price.multiply(supply);
 
         return new CoinSpotResponse(
                 symbol,
-                new BigDecimal(node.path("c").asText("0")),
+                price,
                 new BigDecimal(node.path("P").asText("0")),
                 new BigDecimal(node.path("h").asText("0")),
                 new BigDecimal(node.path("l").asText("0")),
                 new BigDecimal(node.path("v").asText("0")),
-                node.path("E").asLong());
+                node.path("E").asLong(),
+                marketCap);
     }
 
     @Override

@@ -16,7 +16,9 @@ import api.exchange.dtos.Response.UserP2PResponse;
 import api.exchange.models.FundingWallet;
 import api.exchange.models.P2PAd;
 import api.exchange.models.P2POrderDetail;
+import api.exchange.dtos.Request.UpdateAdRequest;
 import api.exchange.models.P2PAd.TradeType;
+import java.util.stream.Collectors;
 import api.exchange.repository.FundingWalletRepository;
 import api.exchange.repository.P2PAdRepository;
 import api.exchange.repository.P2POrderDetailRepository;
@@ -147,6 +149,94 @@ public class P2PADService {
         }
     }
 
+    @Transactional
+    public ResponseEntity<?> updateAd(Long adId, UpdateAdRequest request, String authHeader) {
+        String token = authHeader.substring(7);
+        String userId = jwtUtil.getUserIdFromToken(token);
+
+        P2PAd ad = p2pAdRepository.findById(adId)
+                .orElseThrow(() -> new IllegalArgumentException("Ad not found"));
+
+        if (!ad.getUserId().equals(userId)) {
+            return ResponseEntity.status(403).body(Map.of("message", "Unauthorized"));
+        }
+
+        // Update simple fields if provided
+        if (request.getPrice() != null) {
+            ad.setPrice(request.getPrice());
+        }
+        if (request.getMinAmount() != null) {
+            ad.setMinAmount(request.getMinAmount());
+        }
+        if (request.getMaxAmount() != null) {
+            ad.setMaxAmount(request.getMaxAmount());
+        }
+        if (request.getTermsConditions() != null) {
+            ad.setTermsConditions(request.getTermsConditions());
+        }
+        if (request.getIsActive() != null) {
+            ad.setIsActive(request.getIsActive());
+        }
+
+        // Handle Payment Methods
+        if (ad.getTradeType() == TradeType.SELL) {
+            if (request.getPaymentMethodId() != null) {
+                // Verify new payment method
+                PaymentMethod pm = paymentMethodRepository.findById(request.getPaymentMethodId()).orElse(null);
+                if (pm == null || !pm.getUserId().equals(userId) || !pm.getIsActive()) {
+                    return ResponseEntity.badRequest()
+                            .body(Map.of("message", "Invalid payment method"));
+                }
+                ad.setPaymentMethodId(request.getPaymentMethodId());
+                List<String> methods = new ArrayList<>();
+                methods.add(pm.getType().name());
+                ad.setPaymentMethods(methods);
+            }
+        } else {
+            // BUY Ad
+            if (request.getPaymentMethods() != null && !request.getPaymentMethods().isEmpty()) {
+                ad.setPaymentMethods(request.getPaymentMethods());
+            }
+        }
+
+        // Handle Available Amount Change (Critical for SELL ads)
+        if (request.getAvailableAmount() != null && ad.getTradeType() == TradeType.SELL) {
+            BigDecimal oldAmount = ad.getAvailableAmount();
+            BigDecimal newAmount = request.getAvailableAmount();
+            BigDecimal diff = newAmount.subtract(oldAmount);
+
+            if (diff.compareTo(BigDecimal.ZERO) != 0) {
+                FundingWallet sellerWallet = fundingWalletRepository.findByUidAndCurrency(userId, ad.getAsset());
+                if (sellerWallet == null) {
+                    return ResponseEntity.badRequest().body(Map.of("message", "Wallet not found"));
+                }
+
+                if (diff.compareTo(BigDecimal.ZERO) > 0) {
+                    // Increasing amount: Need to lock more funds
+                    if (sellerWallet.getBalance().compareTo(diff) < 0) {
+                        return ResponseEntity.badRequest()
+                                .body(Map.of("message", "Insufficient balance to increase ad amount"));
+                    }
+                    sellerWallet.setBalance(sellerWallet.getBalance().subtract(diff));
+                    sellerWallet.setLockedBalance(sellerWallet.getLockedBalance().add(diff));
+                } else {
+                    // Decreasing amount: Unlock funds
+                    BigDecimal unlockAmount = diff.abs();
+                    sellerWallet.setLockedBalance(sellerWallet.getLockedBalance().subtract(unlockAmount));
+                    sellerWallet.setBalance(sellerWallet.getBalance().add(unlockAmount));
+                }
+                fundingWalletRepository.save(sellerWallet);
+                ad.setAvailableAmount(newAmount);
+            }
+        } else if (request.getAvailableAmount() != null && ad.getTradeType() == TradeType.BUY) {
+            // For BUY ads, just update the amount
+            ad.setAvailableAmount(request.getAvailableAmount());
+        }
+
+        p2pAdRepository.save(ad);
+        return ResponseEntity.ok(Map.of("message", "Ad updated successfully", "data", ad));
+    }
+
     /**
      * Cancel an Ad and unlock funds if it's a SELL ad.
      */
@@ -188,9 +278,12 @@ public class P2PADService {
         return ResponseEntity.ok(Map.of("message", "Ad cancelled successfully"));
     }
 
+    @Transactional
     public ResponseEntity<?> getListP2PAds(TradeType type) {
         List<UserP2PResponse> listP2PResponse = new ArrayList<>();
         List<P2PAd> listP2pAds = p2pAdRepository.findByTradeType(type);
+        // Filter out inactive ads
+        listP2pAds = listP2pAds.stream().filter(P2PAd::getIsActive).collect(Collectors.toList());
         for (P2PAd p2pAd : listP2pAds) {
             String name = userRepository.findById(p2pAd.getUserId()).get().getUsername();
             BigDecimal totalTransfer = transactionsAdsRepository.countTotalTransactions((p2pAd.getUserId()));
@@ -210,11 +303,15 @@ public class P2PADService {
                             .ifPresent(matchedMethods::add);
                 }
             } else {
-                List<PaymentMethod> userPaymentMethods = paymentMethodRepository
-                        .findByUserIdAndIsActiveTrue(p2pAd.getUserId());
-                matchedMethods = userPaymentMethods.stream()
-                        .filter(pm -> p2pAd.getPaymentMethods().contains(pm.getType().name()))
-                        .collect(Collectors.toList());
+                // For BUY ads, the advertiser is the buyer and doesn't need payment methods.
+                // The seller (taker) will provide their payment method when creating an order.
+                // Here we just show which payment method types are accepted by this ad.
+                // We create placeholder PaymentMethod objects with just the type information.
+                for (String methodType : p2pAd.getPaymentMethods()) {
+                    PaymentMethod placeholder = new PaymentMethod();
+                    placeholder.setType(PaymentMethod.PaymentType.valueOf(methodType));
+                    matchedMethods.add(placeholder);
+                }
             }
 
             UserP2PResponse userP2PResponse = new UserP2PResponse(

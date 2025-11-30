@@ -37,10 +37,10 @@ public class SecurityConfig {
                                 "/api/v1/auth/signup",
                                 "/api/v1/auth/refresh",
                                 "/api/v1/auth/existEmail",
-                                "api/v1/auth/hello",
                                 "api/v1/hisPriceCoin/**",
                                 "api/v1/spotKline/**",
                                 "api/v1/klineSpot/**",
+                                "/api/v1/coin/markets",
                                 "/ws/**")
                         .permitAll()
                         .anyRequest().authenticated())

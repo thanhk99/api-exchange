@@ -2,6 +2,7 @@ package api.exchange.config;
 
 import api.exchange.websocket.SpotMarketWebSocket;
 import api.exchange.websocket.SpotPriceCoinSocket;
+import api.exchange.services.CoinDataService;
 import api.exchange.services.RingBufferService;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,13 +30,17 @@ public class WebSocketInitializer {
     @Value("${binance.api.urlSocket}")
     private String WebsocketUrl;
 
+    @Autowired
+    private CoinDataService coinDataService;
+
     @Bean
     public SpotMarketWebSocket SpotMarketWebSocket() {
         try {
             SpotMarketWebSocket client = new SpotMarketWebSocket(
                     URI.create(WebsocketUrl),
                     messagingTemplate,
-                    objectMapper);
+                    objectMapper,
+                    coinDataService);
             client.connect();
             return client;
         } catch (Exception e) {
