@@ -363,6 +363,13 @@ public class CoinDataService {
                 // Set logo URL from mapping
                 coin.setLogoUrl(LOGO_URLS.getOrDefault(coinId, ""));
 
+                // Calculate Market Cap if circulating supply exists
+                BigDecimal supply = getCirculatingSupply(coinId);
+                if (supply != null && supply.compareTo(BigDecimal.ZERO) > 0) {
+                    coin.setCirculatingSupply(supply);
+                    coin.setMarketCap(coin.getCurrentPrice().multiply(supply));
+                }
+
                 coin.setLastUpdated(LocalDateTime.now());
                 coinRepository.save(coin);
 
@@ -527,6 +534,9 @@ public class CoinDataService {
                             // Update DB (optional, nếu muốn persist)
                             coinRepository.findById(symbol).ifPresent(coin -> {
                                 coin.setCirculatingSupply(supply);
+                                if (coin.getCurrentPrice() != null) {
+                                    coin.setMarketCap(coin.getCurrentPrice().multiply(supply));
+                                }
                                 coinRepository.save(coin);
                             });
                         }

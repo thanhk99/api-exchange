@@ -7,5 +7,5 @@ import api.exchange.models.coinModel;
 
 @Repository
 public interface coinRepository extends JpaRepository<coinModel, String> {
-
+    java.util.List<coinModel> findAllByOrderByMarketCapDesc();
 }

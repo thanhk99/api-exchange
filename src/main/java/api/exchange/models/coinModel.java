@@ -34,4 +34,7 @@ public class coinModel implements Serializable {
 
     @Column(name = "circulating_supply", precision = 20, scale = 2)
     private BigDecimal circulatingSupply;
+
+    @Column(name = "market_cap", precision = 20, scale = 2)
+    private BigDecimal marketCap;
 }
