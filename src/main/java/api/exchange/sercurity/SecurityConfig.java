@@ -41,6 +41,7 @@ public class SecurityConfig {
                                 "api/v1/spotKline/**",
                                 "api/v1/klineSpot/**",
                                 "/api/v1/coin/markets",
+                                "/api/v1/futuresKline/**",
                                 "/ws/**")
                         .permitAll()
                         .anyRequest().authenticated())

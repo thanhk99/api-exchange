@@ -5,13 +5,17 @@ import api.exchange.repository.FuturesOrderRepository;
 import api.exchange.repository.FuturesPositionRepository;
 import api.exchange.repository.FuturesWalletRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
-import java.util.Optional;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class FuturesTradingService {
@@ -266,5 +270,127 @@ public class FuturesTradingService {
         }
 
         futuresPositionRepository.save(position);
+    }
+
+    /**
+     * Get user's orders with optional filtering
+     */
+    public List<FuturesOrder> getOrders(String uid, String symbol, String status, int limit, int offset) {
+        Pageable pageable = PageRequest.of(offset / limit, limit);
+
+        // Parse status if provided
+        FuturesOrder.OrderStatus orderStatus = null;
+        if (status != null && !status.isEmpty()) {
+            try {
+                orderStatus = FuturesOrder.OrderStatus.valueOf(status.toUpperCase());
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException("Invalid status: " + status);
+            }
+        }
+
+        // Query based on filters
+        if (symbol != null && !symbol.isEmpty() && orderStatus != null) {
+            return futuresOrderRepository.findByUidAndSymbolAndStatusOrderByCreatedAtDesc(uid, symbol, orderStatus,
+                    pageable);
+        } else if (symbol != null && !symbol.isEmpty()) {
+            return futuresOrderRepository.findByUidAndSymbolOrderByCreatedAtDesc(uid, symbol, pageable);
+        } else if (orderStatus != null) {
+            return futuresOrderRepository.findByUidAndStatusOrderByCreatedAtDesc(uid, orderStatus, pageable);
+        } else {
+            return futuresOrderRepository.findByUidOrderByCreatedAtDesc(uid, pageable);
+        }
+    }
+
+    /**
+     * Cancel a pending order (soft delete - only changes status to CANCELLED)
+     * Does NOT delete the order record from database
+     */
+    @Transactional
+    public void cancelOrder(String uid, Long orderId) {
+        // 1. Find order
+        FuturesOrder order = futuresOrderRepository.findById(orderId)
+                .orElseThrow(() -> new RuntimeException("Order not found"));
+
+        // 2. Check ownership
+        if (!order.getUid().equals(uid)) {
+            throw new RuntimeException("Unauthorized to cancel this order");
+        }
+
+        // 3. Check status - can only cancel PENDING or PARTIALLY_FILLED orders
+        if (order.getStatus() != FuturesOrder.OrderStatus.PENDING &&
+                order.getStatus() != FuturesOrder.OrderStatus.PARTIALLY_FILLED) {
+            throw new RuntimeException("Cannot cancel order in current status: " + order.getStatus());
+        }
+
+        // 4. Release margin
+        FuturesWallet wallet = futuresWalletRepository
+                .findByUidAndCurrency(uid, "USDT")
+                .orElseThrow(() -> new RuntimeException("Wallet not found"));
+
+        BigDecimal notionalValue = order.getPrice().multiply(order.getQuantity());
+        BigDecimal lockedMargin = notionalValue.divide(
+                BigDecimal.valueOf(order.getLeverage()), 8, RoundingMode.HALF_UP);
+
+        wallet.setLockedBalance(wallet.getLockedBalance().subtract(lockedMargin));
+        if (wallet.getLockedBalance().compareTo(BigDecimal.ZERO) < 0) {
+            wallet.setLockedBalance(BigDecimal.ZERO); // Safety check
+        }
+        futuresWalletRepository.save(wallet);
+
+        // 5. Update order status
+        order.setStatus(FuturesOrder.OrderStatus.CANCELLED);
+        futuresOrderRepository.save(order);
+    }
+
+    /**
+     * Get order book for a symbol
+     */
+    public Map<String, Object> getOrderBook(String symbol, int limit) {
+        Pageable pageable = PageRequest.of(0, limit);
+
+        // Get BUY LIMIT orders (bids), sorted by price descending (highest first)
+        List<FuturesOrder> buyOrders = futuresOrderRepository
+                .findBySymbolAndSideAndStatusAndType(
+                        symbol,
+                        FuturesOrder.OrderSide.BUY,
+                        FuturesOrder.OrderStatus.PENDING,
+                        FuturesOrder.OrderType.LIMIT,
+                        PageRequest.of(0, limit, Sort.by("price").descending()));
+
+        // Get SELL LIMIT orders (asks), sorted by price ascending (lowest first)
+        List<FuturesOrder> sellOrders = futuresOrderRepository
+                .findBySymbolAndSideAndStatusAndType(
+                        symbol,
+                        FuturesOrder.OrderSide.SELL,
+                        FuturesOrder.OrderStatus.PENDING,
+                        FuturesOrder.OrderType.LIMIT,
+                        PageRequest.of(0, limit, Sort.by("price").ascending()));
+
+        // Aggregate orders by price level
+        List<List<String>> bids = aggregateOrdersByPrice(buyOrders);
+        List<List<String>> asks = aggregateOrdersByPrice(sellOrders);
+
+        return Map.of(
+                "symbol", symbol,
+                "lastUpdateId", System.currentTimeMillis(),
+                "bids", bids,
+                "asks", asks);
+    }
+
+    /**
+     * Helper method to aggregate orders by price level
+     */
+    private List<List<String>> aggregateOrdersByPrice(List<FuturesOrder> orders) {
+        Map<BigDecimal, BigDecimal> priceMap = new LinkedHashMap<>();
+
+        for (FuturesOrder order : orders) {
+            priceMap.merge(order.getPrice(), order.getQuantity(), BigDecimal::add);
+        }
+
+        return priceMap.entrySet().stream()
+                .map(e -> Arrays.asList(
+                        e.getKey().toPlainString(),
+                        e.getValue().toPlainString()))
+                .collect(Collectors.toList());
     }
 }

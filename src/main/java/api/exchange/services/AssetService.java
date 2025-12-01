@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import api.exchange.dtos.Request.TransferRequest;
+import api.exchange.dtos.Response.FuturesWalletResponse;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -36,6 +37,9 @@ public class AssetService {
     @Autowired
     private coinRepository coinRepository;
 
+    @Autowired
+    private FuturesWalletService futuresWalletService;
+
     public Map<String, Object> getAssetOverview(String uid) {
         List<FundingWallet> fundingWallets = fundingWalletRepository.findAllByUid(uid);
         List<SpotWallet> spotWallets = spotWalletRepository.findAllByUid(uid);
@@ -44,17 +48,20 @@ public class AssetService {
         Map<String, Object> fundingData = processFundingWallets(fundingWallets);
         Map<String, Object> spotData = processSpotWallets(spotWallets);
         Map<String, Object> earnData = processEarnWallets(earnWallets);
+        Map<String, Object> futuresData = processFuturesWallet(uid);
 
         BigDecimal totalAssetUsd = BigDecimal.ZERO;
         totalAssetUsd = totalAssetUsd.add((BigDecimal) fundingData.get("totalUsd"));
         totalAssetUsd = totalAssetUsd.add((BigDecimal) spotData.get("totalUsd"));
         totalAssetUsd = totalAssetUsd.add((BigDecimal) earnData.get("totalUsd"));
+        totalAssetUsd = totalAssetUsd.add((BigDecimal) futuresData.get("totalUsd"));
 
         Map<String, Object> response = new HashMap<>();
         response.put("totalAssetUsd", totalAssetUsd);
         response.put("funding", fundingData);
         response.put("spot", spotData);
         response.put("earn", earnData);
+        response.put("futures", futuresData);
         return response;
     }
 
@@ -123,6 +130,39 @@ public class AssetService {
         result.put("totalUsd", totalUsd);
         result.put("assets", assetList);
         return result;
+    }
+
+    private Map<String, Object> processFuturesWallet(String uid) {
+        try {
+            FuturesWalletResponse futuresWallet = futuresWalletService.getWalletInfo(uid, "USDT");
+
+            // Calculate total value including unrealized PnL
+            BigDecimal totalValue = futuresWallet.getBalance().add(futuresWallet.getUnrealizedPnl());
+            BigDecimal totalUsd = totalValue; // USDT = 1 USD
+
+            Map<String, Object> asset = new HashMap<>();
+            asset.put("currency", futuresWallet.getCurrency());
+            asset.put("balance", futuresWallet.getBalance());
+            asset.put("lockedBalance", futuresWallet.getLockedBalance());
+            asset.put("availableBalance", futuresWallet.getAvailableBalance());
+            asset.put("unrealizedPnl", futuresWallet.getUnrealizedPnl());
+            asset.put("totalPositionValue", futuresWallet.getTotalPositionValue());
+            asset.put("marginRatio", futuresWallet.getMarginRatio());
+            asset.put("openPositionsCount", futuresWallet.getOpenPositionsCount());
+            asset.put("totalValue", totalValue);
+            asset.put("valueUsd", totalUsd);
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("totalUsd", totalUsd);
+            result.put("asset", asset);
+            return result;
+        } catch (Exception e) {
+            // Return empty data if futures wallet doesn't exist or error occurs
+            Map<String, Object> result = new HashMap<>();
+            result.put("totalUsd", BigDecimal.ZERO);
+            result.put("asset", null);
+            return result;
+        }
     }
 
     private BigDecimal getPrice(String currency) {

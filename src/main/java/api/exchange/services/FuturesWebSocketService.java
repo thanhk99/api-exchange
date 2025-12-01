@@ -29,6 +29,12 @@ public class FuturesWebSocketService {
     @Autowired
     private coinRepository coinRepository;
 
+    @Autowired
+    private api.exchange.services.FuturesDataService futuresDataService;
+
+    @Autowired
+    private api.exchange.services.RedisCacheService redisCacheService;
+
     private FuturesMarketWebSocket futuresMarketWebSocket;
 
     @PostConstruct
@@ -49,7 +55,8 @@ public class FuturesWebSocketService {
             URI uri = new URI("wss://fstream.binance.com/stream?streams=!ticker@arr/!markPrice@arr@1s");
             System.out.println("📡 Connecting to: " + uri);
 
-            futuresMarketWebSocket = new FuturesMarketWebSocket(uri, messagingTemplate, objectMapper, supplyMap);
+            futuresMarketWebSocket = new FuturesMarketWebSocket(uri, messagingTemplate, objectMapper, supplyMap,
+                    futuresDataService, redisCacheService);
             futuresMarketWebSocket.connect();
 
             System.out.println("✅ Futures WebSocket service initialized successfully!");

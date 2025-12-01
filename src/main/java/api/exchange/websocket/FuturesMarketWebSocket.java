@@ -31,8 +31,13 @@ public class FuturesMarketWebSocket extends WebSocketClient {
     // Store latest data for all symbols
     private final ConcurrentHashMap<String, FuturesMarketResponse> marketDataCache = new ConcurrentHashMap<>();
 
+    // Track volume per second for each symbol
+    private final ConcurrentHashMap<String, BigDecimal> volumePerSecond = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, BigDecimal> currentSecondVolume = new ConcurrentHashMap<>();
+
     // Scheduled executor for broadcasting all markets
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+    private final ScheduledExecutorService volumeResetScheduler = Executors.newSingleThreadScheduledExecutor();
 
     // Logo URLs
     private static final Map<String, String> LOGO_URLS = Map.ofEntries(
@@ -58,28 +63,43 @@ public class FuturesMarketWebSocket extends WebSocketClient {
             Map.entry("ICP", "https://assets.coingecko.com/coins/images/14495/large/Internet_Computer_logo.png"),
             Map.entry("ETC", "https://assets.coingecko.com/coins/images/453/large/ethereum-classic-logo.png"));
 
+    private final api.exchange.services.FuturesDataService futuresDataService;
+    private final api.exchange.services.RedisCacheService redisCacheService;
+
     public FuturesMarketWebSocket(URI uri, SimpMessagingTemplate messagingTemplate, ObjectMapper objectMapper,
-            Map<String, BigDecimal> supplyMap) {
+            Map<String, BigDecimal> supplyMap, api.exchange.services.FuturesDataService futuresDataService,
+            api.exchange.services.RedisCacheService redisCacheService) {
         super(uri);
         this.messagingTemplate = messagingTemplate;
         this.objectMapper = objectMapper;
         this.supplyMap = supplyMap;
+        this.futuresDataService = futuresDataService;
+        this.redisCacheService = redisCacheService;
     }
 
     @Override
     public void onOpen(ServerHandshake serverHandshake) {
-        // Subscribe to All Market Tickers and All Mark Prices
+        // Build subscription params with ticker, mark price, and aggregated trades for
+        // tracked symbols
+        StringBuilder params = new StringBuilder();
+        params.append("\"!ticker@arr\",");
+        params.append("\"!markPrice@arr@1s\"");
+
+        // Add aggregated trade streams for each tracked symbol
+        for (String coinId : LOGO_URLS.keySet()) {
+            String symbol = coinId + "USDT";
+            params.append(",\"").append(symbol.toLowerCase()).append("@aggTrade\"");
+        }
+
         String subscribeMessage = "{"
                 + "\"method\": \"SUBSCRIBE\","
-                + "\"params\": ["
-                + "\"!ticker@arr\","
-                + "\"!markPrice@arr@1s\""
-                + "],"
+                + "\"params\": [" + params.toString() + "],"
                 + "\"id\": 1"
                 + "}";
         this.send(subscribeMessage);
-        System.out.println("✅ Connected to Binance Futures WebSocket (Combined Streams)");
+        System.out.println("✅ Connected to Binance Futures WebSocket (Combined Streams + Trades)");
 
+        // Broadcast all markets every second
         scheduler.scheduleAtFixedRate(() -> {
             try {
                 if (!marketDataCache.isEmpty()) {
@@ -90,18 +110,24 @@ public class FuturesMarketWebSocket extends WebSocketClient {
                 System.err.println("❌ Error broadcasting all markets: " + e.getMessage());
             }
         }, 1, 1, TimeUnit.SECONDS);
-    }
 
-    private long messageCount = 0;
+        // Reset volume counters every second
+        volumeResetScheduler.scheduleAtFixedRate(() -> {
+            try {
+                // Copy current second volume to volumePerSecond for use in 1s klines
+                volumePerSecond.clear();
+                volumePerSecond.putAll(currentSecondVolume);
+                // Clear current second volume for next second
+                currentSecondVolume.clear();
+            } catch (Exception e) {
+                System.err.println("❌ Error resetting volume counters: " + e.getMessage());
+            }
+        }, 1, 1, TimeUnit.SECONDS);
+    }
 
     @Override
     public void onMessage(String message) {
         try {
-            messageCount++;
-            if (messageCount % 100 == 0) {
-                System.out.println("📥 Received " + messageCount + " messages from Binance");
-            }
-
             JsonNode jsonNode = objectMapper.readTree(message);
 
             if (jsonNode.has("stream") && jsonNode.has("data")) {
@@ -112,6 +138,8 @@ public class FuturesMarketWebSocket extends WebSocketClient {
                     processTickerData(data);
                 } else if (stream.equals("!markPrice@arr@1s")) {
                     processMarkPriceData(data);
+                } else if (stream.endsWith("@aggTrade")) {
+                    processAggTradeData(data);
                 }
             }
 
@@ -164,32 +192,80 @@ public class FuturesMarketWebSocket extends WebSocketClient {
         if (dataArray.isArray()) {
             for (JsonNode node : dataArray) {
                 String symbol = node.path("s").asText().toUpperCase();
+                BigDecimal price = new BigDecimal(node.path("p").asText("0"));
 
-                // Only process symbols we care about
-                String coinId = symbol.replace("USDT", "");
-                if (!LOGO_URLS.containsKey(coinId))
-                    continue;
-
-                marketDataCache.compute(symbol, (k, v) -> {
-                    if (v == null)
-                        v = new FuturesMarketResponse();
-
-                    v.setSymbol(symbol);
-                    v.setMarkPrice(new BigDecimal(node.path("p").asText("0")));
-                    v.setIndexPrice(new BigDecimal(node.path("i").asText("0")));
-                    v.setFundingRate(new BigDecimal(node.path("r").asText("0")));
-                    v.setNextFundingTime(LocalDateTime.ofInstant(Instant.ofEpochMilli(node.path("T").asLong()),
+                // Update cache if exists
+                if (marketDataCache.containsKey(symbol)) {
+                    FuturesMarketResponse response = marketDataCache.get(symbol);
+                    response.setMarkPrice(price);
+                    response.setIndexPrice(new BigDecimal(node.path("i").asText("0")));
+                    response.setFundingRate(new BigDecimal(node.path("r").asText("0")));
+                    response.setNextFundingTime(LocalDateTime.ofInstant(Instant.ofEpochMilli(node.path("T").asLong()),
                             ZoneId.systemDefault()));
+                }
 
-                    // Defaults if missing
-                    if (v.getLogoUrl() == null)
-                        v.setLogoUrl(LOGO_URLS.getOrDefault(coinId, ""));
-                    if (v.getLastPrice() == null)
-                        v.setLastPrice(v.getMarkPrice()); // Fallback
-
-                    return v;
-                });
+                // Process 1s kline for tracked symbols
+                String coinId = symbol.replace("USDT", "");
+                if (LOGO_URLS.containsKey(coinId)) {
+                    process1sKline(symbol, price);
+                }
             }
+        }
+    }
+
+    private void process1sKline(String symbol, BigDecimal price) {
+        try {
+            LocalDateTime now = LocalDateTime.now();
+
+            // Get volume for this second (default to 0 if no trades)
+            BigDecimal volume = volumePerSecond.getOrDefault(symbol, BigDecimal.ZERO);
+
+            // Tạo kline 1s với volume thực
+            api.exchange.models.FuturesKlineData1s kline1s = new api.exchange.models.FuturesKlineData1s(
+                    symbol, price, volume, now);
+
+            // Lưu vào database (async để không block websocket)
+            java.util.concurrent.CompletableFuture.runAsync(() -> {
+                futuresDataService.saveKlineData1s(kline1s);
+            });
+
+            // Invalidate Redis Cache để lần tới API gọi sẽ lấy dữ liệu mới nhất từ DB
+            redisCacheService.invalidate1sKlineCache(symbol);
+
+            // Broadcast tới topic riêng cho kline 1s
+            // Format: /topic/futures/kline/1s/{symbol}
+            String topic = "/topic/futures/kline/1s/" + symbol.toLowerCase();
+
+            Map<String, Object> klineData = new java.util.HashMap<>();
+            klineData.put("s", symbol);
+            klineData.put("o", price);
+            klineData.put("c", price);
+            klineData.put("h", price);
+            klineData.put("l", price);
+            klineData.put("v", volume);
+            klineData.put("t", now.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli());
+            klineData.put("i", "1s");
+
+            messagingTemplate.convertAndSend(topic, klineData);
+
+        } catch (Exception e) {
+            System.err.println("Error processing 1s kline for " + symbol + ": " + e.getMessage());
+        }
+    }
+
+    /**
+     * Process aggregated trade data to accumulate volume per second
+     */
+    private void processAggTradeData(JsonNode data) {
+        try {
+            String symbol = data.path("s").asText().toUpperCase();
+            BigDecimal quantity = new BigDecimal(data.path("q").asText("0"));
+
+            // Accumulate volume for current second
+            currentSecondVolume.compute(symbol, (k, v) -> v == null ? quantity : v.add(quantity));
+
+        } catch (Exception e) {
+            System.err.println("❌ Error processing aggTrade data: " + e.getMessage());
         }
     }
 
@@ -197,6 +273,7 @@ public class FuturesMarketWebSocket extends WebSocketClient {
     public void onClose(int code, String reason, boolean remote) {
         System.out.println("❌ Futures WebSocket closed: " + reason + " (code: " + code + ")");
         scheduler.shutdown();
+        volumeResetScheduler.shutdown();
     }
 
     @Override
