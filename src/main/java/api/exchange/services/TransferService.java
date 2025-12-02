@@ -28,6 +28,10 @@ import api.exchange.repository.SpotWalletRepository;
 import api.exchange.repository.TransactionEarnRepository;
 import api.exchange.repository.UserRepository;
 import api.exchange.sercurity.jwt.JwtUtil;
+import api.exchange.models.FuturesTransaction;
+import api.exchange.models.FuturesWallet;
+import api.exchange.repository.FuturesTransactionRepository;
+import api.exchange.repository.FuturesWalletRepository;
 
 @Service
 public class TransferService {
@@ -55,6 +59,12 @@ public class TransferService {
 
     @Autowired
     private TransactionEarnRepository transactionEarnRepository;
+
+    @Autowired
+    private FuturesWalletRepository futuresWalletRepository;
+
+    @Autowired
+    private FuturesTransactionRepository futuresTransactionRepository;
 
     @Transactional
     public ResponseEntity<?> internalTransfer(String authHeader, InternalTransferRequest request) {
@@ -148,6 +158,14 @@ public class TransferService {
                 return transferSpotToEarn(uid, request.getCurrency(), request.getAmount());
             } else if (from.equals("EARN") && to.equals("SPOT")) {
                 return transferEarnToSpot(uid, request.getCurrency(), request.getAmount());
+            } else if (from.equals("SPOT") && to.equals("FUTURES")) {
+                return transferSpotToFutures(uid, request.getCurrency(), request.getAmount());
+            } else if (from.equals("FUTURES") && to.equals("SPOT")) {
+                return transferFuturesToSpot(uid, request.getCurrency(), request.getAmount());
+            } else if (from.equals("FUNDING") && to.equals("FUTURES")) {
+                return transferFundingToFutures(uid, request.getCurrency(), request.getAmount());
+            } else if (from.equals("FUTURES") && to.equals("FUNDING")) {
+                return transferFuturesToFunding(uid, request.getCurrency(), request.getAmount());
             } else {
                 return ResponseEntity.badRequest().body(Map.of("message", "Invalid wallet types"));
             }
@@ -375,5 +393,135 @@ public class TransferService {
         history.setType(type);
         history.setCreateDt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
         transactionEarnRepository.save(history);
+    }
+
+    private ResponseEntity<?> transferSpotToFutures(String uid, String currency, BigDecimal amount) {
+        SpotWallet spotWallet = spotWalletRepository.findByUidAndCurrency(uid, currency);
+        if (spotWallet == null
+                || spotWallet.getBalance().subtract(spotWallet.getLockedBalance()).compareTo(amount) < 0) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Insufficient spot balance"));
+        }
+
+        FuturesWallet futuresWallet = futuresWalletRepository.findByUidAndCurrency(uid, currency)
+                .orElseGet(() -> {
+                    FuturesWallet wallet = new FuturesWallet();
+                    wallet.setUid(uid);
+                    wallet.setCurrency(currency);
+                    wallet.setBalance(BigDecimal.ZERO);
+                    wallet.setLockedBalance(BigDecimal.ZERO);
+                    return futuresWalletRepository.save(wallet);
+                });
+
+        spotWallet.setBalance(spotWallet.getBalance().subtract(amount));
+        futuresWallet.setBalance(futuresWallet.getBalance().add(amount));
+
+        spotWalletRepository.save(spotWallet);
+        futuresWalletRepository.save(futuresWallet);
+
+        recordSpotHistory(uid, currency, amount.negate(), "Transfer to Futures Wallet", spotWallet.getBalance());
+        recordFuturesTransaction(uid, currency, amount, FuturesTransaction.TransactionType.TRANSFER_IN);
+
+        return ResponseEntity.ok(Map.of("message", "success"));
+    }
+
+    private ResponseEntity<?> transferFuturesToSpot(String uid, String currency, BigDecimal amount) {
+        FuturesWallet futuresWallet = futuresWalletRepository.findByUidAndCurrency(uid, currency)
+                .orElse(null);
+
+        if (futuresWallet == null
+                || futuresWallet.getBalance().subtract(futuresWallet.getLockedBalance()).compareTo(amount) < 0) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Insufficient futures balance"));
+        }
+
+        SpotWallet spotWallet = spotWalletRepository.findByUidAndCurrency(uid, currency);
+        if (spotWallet == null) {
+            spotWallet = new SpotWallet();
+            spotWallet.setUid(uid);
+            spotWallet.setCurrency(currency);
+            spotWallet.setBalance(BigDecimal.ZERO);
+            spotWallet.setLockedBalance(BigDecimal.ZERO);
+            spotWalletRepository.save(spotWallet);
+        }
+
+        futuresWallet.setBalance(futuresWallet.getBalance().subtract(amount));
+        spotWallet.setBalance(spotWallet.getBalance().add(amount));
+
+        futuresWalletRepository.save(futuresWallet);
+        spotWalletRepository.save(spotWallet);
+
+        recordFuturesTransaction(uid, currency, amount, FuturesTransaction.TransactionType.TRANSFER_OUT);
+        recordSpotHistory(uid, currency, amount, "Transfer from Futures Wallet", spotWallet.getBalance());
+
+        return ResponseEntity.ok(Map.of("message", "success"));
+    }
+
+    private ResponseEntity<?> transferFundingToFutures(String uid, String currency, BigDecimal amount) {
+        FundingWallet fundingWallet = fundingWalletRepository.findByUidAndCurrency(uid, currency);
+        if (fundingWallet == null || fundingWallet.getAvailableBalance().compareTo(amount) < 0) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Insufficient funding balance"));
+        }
+
+        FuturesWallet futuresWallet = futuresWalletRepository.findByUidAndCurrency(uid, currency)
+                .orElseGet(() -> {
+                    FuturesWallet wallet = new FuturesWallet();
+                    wallet.setUid(uid);
+                    wallet.setCurrency(currency);
+                    wallet.setBalance(BigDecimal.ZERO);
+                    wallet.setLockedBalance(BigDecimal.ZERO);
+                    return futuresWalletRepository.save(wallet);
+                });
+
+        fundingWallet.setBalance(fundingWallet.getBalance().subtract(amount));
+        futuresWallet.setBalance(futuresWallet.getBalance().add(amount));
+
+        fundingWalletRepository.save(fundingWallet);
+        futuresWalletRepository.save(futuresWallet);
+
+        recordFundingHistory(uid, currency, amount.negate(), "Transfer to Futures Wallet", fundingWallet.getBalance());
+        recordFuturesTransaction(uid, currency, amount, FuturesTransaction.TransactionType.TRANSFER_IN);
+
+        return ResponseEntity.ok(Map.of("message", "success"));
+    }
+
+    private ResponseEntity<?> transferFuturesToFunding(String uid, String currency, BigDecimal amount) {
+        FuturesWallet futuresWallet = futuresWalletRepository.findByUidAndCurrency(uid, currency)
+                .orElse(null);
+
+        if (futuresWallet == null
+                || futuresWallet.getBalance().subtract(futuresWallet.getLockedBalance()).compareTo(amount) < 0) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Insufficient futures balance"));
+        }
+
+        FundingWallet fundingWallet = fundingWalletRepository.findByUidAndCurrency(uid, currency);
+        if (fundingWallet == null) {
+            fundingWallet = new FundingWallet();
+            fundingWallet.setUid(uid);
+            fundingWallet.setCurrency(currency);
+            fundingWallet.setBalance(BigDecimal.ZERO);
+            fundingWallet.setLockedBalance(BigDecimal.ZERO);
+            fundingWalletRepository.save(fundingWallet);
+        }
+
+        futuresWallet.setBalance(futuresWallet.getBalance().subtract(amount));
+        fundingWallet.setBalance(fundingWallet.getBalance().add(amount));
+
+        futuresWalletRepository.save(futuresWallet);
+        fundingWalletRepository.save(fundingWallet);
+
+        recordFuturesTransaction(uid, currency, amount, FuturesTransaction.TransactionType.TRANSFER_OUT);
+        recordFundingHistory(uid, currency, amount, "Transfer from Futures Wallet", fundingWallet.getBalance());
+
+        return ResponseEntity.ok(Map.of("message", "success"));
+    }
+
+    private void recordFuturesTransaction(String uid, String currency, BigDecimal amount,
+            FuturesTransaction.TransactionType type) {
+        FuturesTransaction tx = new FuturesTransaction();
+        tx.setUid(uid);
+        tx.setType(type);
+        tx.setAmount(amount);
+        tx.setCurrency(currency);
+        tx.setCreatedAt(LocalDateTime.now());
+        futuresTransactionRepository.save(tx);
     }
 }

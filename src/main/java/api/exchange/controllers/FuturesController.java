@@ -1,9 +1,7 @@
 package api.exchange.controllers;
 
-import api.exchange.dtos.Request.FuturesOrderRequest;
 import api.exchange.dtos.Request.FuturesTransferRequest;
 import api.exchange.dtos.Response.FuturesWalletResponse;
-import api.exchange.models.FuturesOrder;
 import api.exchange.models.FuturesPosition;
 import api.exchange.repository.FuturesPositionRepository;
 import api.exchange.sercurity.jwt.JwtUtil;
@@ -68,26 +66,6 @@ public class FuturesController {
         }
     }
 
-    @PostMapping("/order")
-    public ResponseEntity<?> placeOrder(@RequestHeader("Authorization") String authHeader,
-            @RequestBody FuturesOrderRequest request) {
-        try {
-            String uid = extractUid(authHeader);
-            FuturesOrder order = futuresTradingService.placeOrder(
-                    uid,
-                    request.getSymbol(),
-                    request.getSide(),
-                    request.getPositionSide(),
-                    request.getType(),
-                    request.getPrice(),
-                    request.getQuantity(),
-                    request.getLeverage());
-            return ResponseEntity.ok(order);
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
-        }
-    }
-
     @GetMapping("/positions")
     public ResponseEntity<?> getPositions(@RequestHeader("Authorization") String authHeader) {
         try {
@@ -135,64 +113,6 @@ public class FuturesController {
             return ResponseEntity.ok(Map.of(
                     "message", "success",
                     "data", futuresMarkets));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
-        }
-    }
-
-    /**
-     * Get list of user's orders with optional filtering
-     * GET /api/v1/futures/orders?symbol=BTCUSDT&status=PENDING&limit=50&offset=0
-     */
-    @GetMapping("/orders")
-    public ResponseEntity<?> getOrders(
-            @RequestHeader("Authorization") String authHeader,
-            @RequestParam(required = false) String symbol,
-            @RequestParam(required = false) String status,
-            @RequestParam(defaultValue = "50") int limit,
-            @RequestParam(defaultValue = "0") int offset) {
-        try {
-            String uid = extractUid(authHeader);
-            List<FuturesOrder> orders = futuresTradingService.getOrders(uid, symbol, status, limit, offset);
-            return ResponseEntity.ok(Map.of(
-                    "message", "success",
-                    "data", orders,
-                    "total", orders.size()));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
-        }
-    }
-
-    /**
-     * Cancel a pending order (soft delete - changes status to CANCELLED)
-     * POST /api/v1/futures/order/{orderId}/cancel
-     */
-    @PostMapping("/order/{orderId}/cancel")
-    public ResponseEntity<?> cancelOrder(
-            @RequestHeader("Authorization") String authHeader,
-            @PathVariable Long orderId) {
-        try {
-            String uid = extractUid(authHeader);
-            futuresTradingService.cancelOrder(uid, orderId);
-            return ResponseEntity.ok(Map.of(
-                    "message", "Order cancelled successfully",
-                    "orderId", orderId));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
-        }
-    }
-
-    /**
-     * Get order book for a symbol
-     * GET /api/v1/futures/orderbook/{symbol}?limit=20
-     */
-    @GetMapping("/orderbook/{symbol}")
-    public ResponseEntity<?> getOrderBook(
-            @PathVariable String symbol,
-            @RequestParam(defaultValue = "20") int limit) {
-        try {
-            var orderBook = futuresTradingService.getOrderBook(symbol, limit);
-            return ResponseEntity.ok(orderBook);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }

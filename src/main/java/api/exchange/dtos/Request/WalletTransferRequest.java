@@ -5,8 +5,8 @@ import java.math.BigDecimal;
 
 @Data
 public class WalletTransferRequest {
-    private String fromWallet; // "FUNDING" or "SPOT"
-    private String toWallet; // "FUNDING" or "SPOT"
+    private String fromWallet; // "FUNDING", "SPOT", "FUTURES"
+    private String toWallet; // "FUNDING", "SPOT", "FUTURES"
     private String currency;
     private BigDecimal amount;
 }

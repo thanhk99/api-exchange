@@ -13,7 +13,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -84,54 +83,94 @@ public class FuturesTradingService {
 
         futuresOrderRepository.save(order);
 
-        // 7. Execute Market Order Immediately
-        if (type == FuturesOrder.OrderType.MARKET) {
-            executeOrder(order, currentPrice);
-        }
+        // 7. Trigger Matching Engine
+        matchOrders(symbol);
 
         return order;
     }
 
     @Transactional
-    public void executeOrder(FuturesOrder order, BigDecimal executionPrice) {
-        // Update Order Status
-        order.setStatus(FuturesOrder.OrderStatus.FILLED);
-        order.setPrice(executionPrice); // Ensure price is set to actual execution price
+    public void executeTrade(FuturesOrder makerOrder, FuturesOrder takerOrder, BigDecimal price, BigDecimal quantity) {
+        // 1. Update Orders
+        updateOrderAfterTrade(makerOrder, price, quantity);
+        updateOrderAfterTrade(takerOrder, price, quantity);
+
+        // 2. Update Positions for Maker
+        updatePosition(makerOrder, price, quantity);
+
+        // 3. Update Positions for Taker
+        updatePosition(takerOrder, price, quantity);
+    }
+
+    private void updateOrderAfterTrade(FuturesOrder order, BigDecimal price, BigDecimal quantity) {
+        BigDecimal remaining = order.getQuantity().subtract(quantity);
+        if (remaining.compareTo(BigDecimal.ZERO) == 0) {
+            order.setStatus(FuturesOrder.OrderStatus.FILLED);
+        } else {
+            order.setStatus(FuturesOrder.OrderStatus.PARTIALLY_FILLED);
+        }
+        order.setQuantity(remaining); // Update remaining quantity
+        // Note: For simplicity, we don't track cumulative filled quantity/avg price in
+        // Order model yet.
+        // In a real system, we would have 'filledQuantity' and 'averagePrice' fields.
         futuresOrderRepository.save(order);
 
-        // Update/Create Position
+        // Release Margin for the FILLED portion
+        FuturesWallet wallet = futuresWalletRepository
+                .findByUidAndCurrency(order.getUid(), "USDT")
+                .orElseThrow(() -> new RuntimeException("Wallet not found"));
+
+        BigDecimal tradeValue = price.multiply(quantity);
+        BigDecimal marginToRelease = tradeValue.divide(BigDecimal.valueOf(order.getLeverage()), 8,
+                RoundingMode.HALF_UP);
+
+        // Note: The margin locked was based on Order Price, but we release based on
+        // Trade Price?
+        // NO. We must release the margin that was originally locked.
+        // Original Locked = OrderPrice * Qty / Leverage
+        // We should release: OrderPrice * TradeQty / Leverage
+        BigDecimal originalMarginLocked = order.getPrice().multiply(quantity)
+                .divide(BigDecimal.valueOf(order.getLeverage()), 8, RoundingMode.HALF_UP);
+
+        wallet.setLockedBalance(wallet.getLockedBalance().subtract(originalMarginLocked));
+        if (wallet.getLockedBalance().compareTo(BigDecimal.ZERO) < 0) {
+            wallet.setLockedBalance(BigDecimal.ZERO);
+        }
+        futuresWalletRepository.save(wallet);
+    }
+
+    private void updatePosition(FuturesOrder order, BigDecimal price, BigDecimal quantity) {
         Optional<FuturesPosition> existingPosition = futuresPositionRepository.findByUidAndSymbolAndStatus(
                 order.getUid(), order.getSymbol(), FuturesPosition.PositionStatus.OPEN);
 
-        // Simplified Logic: Assuming One-Way Mode or matching Position Side
-        // For this MVP, let's assume we are opening a new position or adding to
-        // existing one of same side
+        FuturesWallet wallet = futuresWalletRepository
+                .findByUidAndCurrency(order.getUid(), "USDT")
+                .orElseThrow(() -> new RuntimeException("Wallet not found"));
 
         FuturesPosition position;
         if (existingPosition.isPresent()) {
             position = existingPosition.get();
-            // Check if same side
             if (position.getSide().name().equals(order.getPositionSide().name())) {
                 // Add to position
-                // New Entry Price = ((OldQty * OldEntry) + (NewQty * NewEntry)) / TotalQty
-                BigDecimal totalQuantity = position.getQuantity().add(order.getQuantity());
+                BigDecimal totalQuantity = position.getQuantity().add(quantity);
                 BigDecimal totalCost = position.getQuantity().multiply(position.getEntryPrice())
-                        .add(order.getQuantity().multiply(executionPrice));
+                        .add(quantity.multiply(price));
                 BigDecimal newEntryPrice = totalCost.divide(totalQuantity, 8, RoundingMode.HALF_UP);
 
                 position.setEntryPrice(newEntryPrice);
                 position.setQuantity(totalQuantity);
 
                 // Update Margin
-                BigDecimal notionalValue = executionPrice.multiply(order.getQuantity());
+                BigDecimal notionalValue = price.multiply(quantity);
                 BigDecimal addedMargin = notionalValue.divide(BigDecimal.valueOf(order.getLeverage()), 8,
                         RoundingMode.HALF_UP);
                 position.setMargin(position.getMargin().add(addedMargin));
+
+                // Lock margin for the added position size
+                wallet.setLockedBalance(wallet.getLockedBalance().add(addedMargin));
             } else {
                 // Reduce/Close position (Hedge mode logic or simple close)
-                // For MVP, let's throw error if trying to open opposite side in same position
-                // record
-                // Ideally, we should handle reducing the position here.
+                // For P2P MVP, let's assume One-Way Mode for simplicity or throw error
                 throw new RuntimeException("Opposite side position handling not implemented in MVP");
             }
         } else {
@@ -140,29 +179,30 @@ public class FuturesTradingService {
             position.setUid(order.getUid());
             position.setSymbol(order.getSymbol());
             position.setSide(FuturesPosition.PositionSide.valueOf(order.getPositionSide().name()));
-            position.setEntryPrice(executionPrice);
-            position.setQuantity(order.getQuantity());
+            position.setEntryPrice(price);
+            position.setQuantity(quantity);
             position.setLeverage(order.getLeverage());
             position.setStatus(FuturesPosition.PositionStatus.OPEN);
 
-            BigDecimal notionalValue = executionPrice.multiply(order.getQuantity());
+            BigDecimal notionalValue = price.multiply(quantity);
             BigDecimal margin = notionalValue.divide(BigDecimal.valueOf(order.getLeverage()), 8, RoundingMode.HALF_UP);
             position.setMargin(margin);
 
-            // Calculate Liquidation Price (Simplified for Long)
-            // Liq Price = Entry Price * (1 - 1/Leverage + MaintenanceMarginRate)
-            // Using simplified: Entry * (1 - 1/Lev)
+            // Lock margin for the new position
+            wallet.setLockedBalance(wallet.getLockedBalance().add(margin));
+
+            // Calculate Liquidation Price
             if (position.getSide() == FuturesPosition.PositionSide.LONG) {
-                BigDecimal liqPrice = executionPrice.multiply(BigDecimal.ONE.subtract(
+                BigDecimal liqPrice = price.multiply(BigDecimal.ONE.subtract(
                         BigDecimal.ONE.divide(BigDecimal.valueOf(order.getLeverage()), 8, RoundingMode.HALF_UP)));
                 position.setLiquidationPrice(liqPrice);
             } else {
-                BigDecimal liqPrice = executionPrice.multiply(BigDecimal.ONE
+                BigDecimal liqPrice = price.multiply(BigDecimal.ONE
                         .add(BigDecimal.ONE.divide(BigDecimal.valueOf(order.getLeverage()), 8, RoundingMode.HALF_UP)));
                 position.setLiquidationPrice(liqPrice);
             }
         }
-
+        futuresWalletRepository.save(wallet);
         futuresPositionRepository.save(position);
     }
 
@@ -375,6 +415,70 @@ public class FuturesTradingService {
                 "lastUpdateId", System.currentTimeMillis(),
                 "bids", bids,
                 "asks", asks);
+    }
+
+    /**
+     * P2P Matching Engine
+     * Scans the order book for the given symbol and executes trades if crosses
+     * exist.
+     */
+    @Transactional
+    public void matchOrders(String symbol) {
+        // 1. Fetch Pending Orders
+        // Buy Orders: Highest Price First (Best Bid)
+        List<FuturesOrder> buyOrders = futuresOrderRepository
+                .findBySymbolAndSideAndStatusOrderByPriceDescCreatedAtAsc(
+                        symbol, FuturesOrder.OrderSide.BUY, FuturesOrder.OrderStatus.PENDING);
+
+        // Sell Orders: Lowest Price First (Best Ask)
+        List<FuturesOrder> sellOrders = futuresOrderRepository
+                .findBySymbolAndSideAndStatusOrderByPriceAscCreatedAtAsc(
+                        symbol, FuturesOrder.OrderSide.SELL, FuturesOrder.OrderStatus.PENDING);
+
+        if (buyOrders.isEmpty() || sellOrders.isEmpty()) {
+            return; // No liquidity to match
+        }
+
+        // 2. Matching Loop
+        int buyIndex = 0;
+        int sellIndex = 0;
+
+        while (buyIndex < buyOrders.size() && sellIndex < sellOrders.size()) {
+            FuturesOrder bestBuy = buyOrders.get(buyIndex);
+            FuturesOrder bestSell = sellOrders.get(sellIndex);
+
+            // Check for Cross: Best Buy Price >= Best Sell Price
+            if (bestBuy.getPrice().compareTo(bestSell.getPrice()) >= 0) {
+                // MATCH FOUND!
+
+                // Determine Trade Price (Maker's Price)
+                // If Buy Order came first, it's the Maker -> Price = Buy Price
+                // If Sell Order came first, it's the Maker -> Price = Sell Price
+                BigDecimal tradePrice;
+                if (bestBuy.getCreatedAt().isBefore(bestSell.getCreatedAt())) {
+                    tradePrice = bestBuy.getPrice();
+                } else {
+                    tradePrice = bestSell.getPrice();
+                }
+
+                // Determine Trade Quantity (Min of remaining quantities)
+                BigDecimal tradeQuantity = bestBuy.getQuantity().min(bestSell.getQuantity());
+
+                // Execute Trade
+                System.out.println("⚡ P2P MATCH: Buy " + bestBuy.getId() + " vs Sell " + bestSell.getId() + " @ "
+                        + tradePrice + " Qty: " + tradeQuantity);
+                executeTrade(bestBuy, bestSell, tradePrice, tradeQuantity);
+                if (bestBuy.getQuantity().compareTo(BigDecimal.ZERO) == 0) {
+                    buyIndex++;
+                }
+                if (bestSell.getQuantity().compareTo(BigDecimal.ZERO) == 0) {
+                    sellIndex++;
+                }
+            } else {
+                // No more crosses possible (since lists are sorted)
+                break;
+            }
+        }
     }
 
     /**
