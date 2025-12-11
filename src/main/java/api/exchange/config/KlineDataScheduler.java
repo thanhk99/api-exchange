@@ -1,6 +1,7 @@
 package api.exchange.config;
 
 import api.exchange.services.CoinDataService;
+import api.exchange.services.FuturesDataService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -10,6 +11,9 @@ public class KlineDataScheduler {
 
     @Autowired
     private CoinDataService coinDataService;
+
+    @Autowired
+    private FuturesDataService futuresDataService;
 
     /**
      * Lấy dữ liệu kline 1m mỗi phút
@@ -42,6 +46,36 @@ public class KlineDataScheduler {
     }
 
     /**
+     * Lấy dữ liệu futures 1m mỗi phút
+     * Chạy vào giây 5 của mỗi phút (offset để tránh conflict với spot)
+     */
+    @Scheduled(cron = "5 * * * * *")
+    public void fetchFuturesMinuteData() {
+        System.out.println("🔄 Fetching futures 1m data at: " + java.time.LocalDateTime.now());
+
+        try {
+            futuresDataService.fetchAndSaveAllKlineData1m();
+        } catch (Exception e) {
+            System.err.println("❌ Error in futures 1m data fetch: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Lấy dữ liệu futures 1h mỗi giờ
+     * Chạy vào phút 0, giây 30 của mỗi giờ (offset để tránh conflict với spot)
+     */
+    @Scheduled(cron = "30 0 * * * *")
+    public void fetchFuturesHourlyData() {
+        System.out.println("🔄 Fetching futures 1h data at: " + java.time.LocalDateTime.now());
+
+        try {
+            futuresDataService.fetchAndSaveAllKlineData1h();
+        } catch (Exception e) {
+            System.err.println("❌ Error in futures 1h data fetch: " + e.getMessage());
+        }
+    }
+
+    /**
      * Lấy dữ liệu ban đầu khi ứng dụng khởi động
      * Chạy sau khi ứng dụng khởi động 30 giây
      */
@@ -52,11 +86,17 @@ public class KlineDataScheduler {
             // Lấy thông tin coin ban đầu
             coinDataService.fetchAndSaveAllCoinInfo();
 
-            // Lấy dữ liệu 1m ban đầu
+            // Lấy dữ liệu spot 1m ban đầu
             coinDataService.fetchAndSaveAllKlineData1m();
 
-            // Lấy dữ liệu 1h ban đầu
+            // Lấy dữ liệu spot 1h ban đầu
             coinDataService.fetchAndSaveAllKlineData1h();
+
+            // Lấy dữ liệu futures 1m ban đầu
+            futuresDataService.fetchAndSaveAllKlineData1m();
+
+            // Lấy dữ liệu futures 1h ban đầu
+            futuresDataService.fetchAndSaveAllKlineData1h();
 
         } catch (Exception e) {
             System.err.println("❌ Error in initial data fetch: " + e.getMessage());

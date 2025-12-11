@@ -122,7 +122,7 @@ public class DeviceService {
 
     @Transactional
     public void deactivateDevice(String deviceId) {
-        LocalDateTime timeNow= LocalDateTime.now();
+        LocalDateTime timeNow = LocalDateTime.now();
         userDeviceRepository.findByDeviceId(deviceId)
                 .ifPresent(device -> {
                     device.setActive(false);
@@ -186,22 +186,42 @@ public class DeviceService {
     }
 
     @Transactional
-    public ResponseEntity<?> revokeDevice(UserDevice userDevice){
+    public ResponseEntity<?> revokeDevice(String deviceId, String authHeader) {
         try {
-            refreshToken refreshToken= refreshTokenRepository.findByDeviceId(userDevice.getDeviceId());
-            UserDevice userDevice1=userDeviceRepository.findByDeviceId(userDevice.getDeviceId()).orElse(null);
-            if(userDevice1.isActive()){
+            String token = authHeader.substring(7);
+            String uid = jwtUtil.getUserIdFromToken(token);
+
+            UserDevice userDevice = userDeviceRepository.findByDeviceId(deviceId).orElse(null);
+
+            if (userDevice == null) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(Map.of("message", "Device not found"));
+            }
+
+            // Verify ownership
+            if (!userDevice.getUser().getUid().equals(uid)) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(Map.of("message", "Access denied"));
+            }
+
+            if (userDevice.isActive()) {
                 LocalDateTime timeNow = LocalDateTime.now();
-                userDevice1.setActive(false);
-                userDevice1.setLogoutAt(timeNow);
-                userDeviceRepository.save(userDevice1);
-                refreshTokenRepository.delete(refreshToken);
-                                return ResponseEntity.ok(Map.of("message", "success","data","Revoke device success"));
+                userDevice.setActive(false);
+                userDevice.setLogoutAt(timeNow);
+                userDeviceRepository.save(userDevice);
+
+                // Delete associated refresh token if exists
+                refreshToken refreshToken = refreshTokenRepository.findByDeviceId(deviceId);
+                if (refreshToken != null) {
+                    refreshTokenRepository.delete(refreshToken);
+                }
+
+                return ResponseEntity.ok(Map.of("message", "success", "data", "Revoke device success"));
+            } else {
+                return ResponseEntity.badRequest().body(Map.of("message", "Device is already revoked"));
             }
-            else{
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message"," Device is already revoked"));
-            }
-        }catch(Exception e){
+        } catch (Exception e) {
+            e.printStackTrace();
             return ResponseEntity.internalServerError().body(Map.of("message", "An unexpected error occurred"));
         }
     }

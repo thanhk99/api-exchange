@@ -17,9 +17,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.server.ResponseStatusException;
 
-import api.exchange.dtos.Requset.LoginRequest;
-import api.exchange.dtos.Requset.RefreshTokenRequest;
-import api.exchange.dtos.Requset.SignupRequest;
+import api.exchange.dtos.Request.LoginRequest;
+import api.exchange.dtos.Request.RefreshTokenRequest;
+import api.exchange.dtos.Request.SignupRequest;
 import api.exchange.dtos.Response.AuthResponse;
 import api.exchange.models.User;
 import api.exchange.models.UserDevice;
@@ -83,7 +83,7 @@ public class AuthService {
             User user = new User();
             user.setUsername(signupRequest.getUsername());
             user.setEmail(signupRequest.getEmail());
-            user.setPassword(passwordEncoder.encode(signupRequest.getPassword()));  
+            user.setPassword(passwordEncoder.encode(signupRequest.getPassword()));
             user.setCreatedAt(LocalDateTime.now());
             user.setNation(signupRequest.getNation());
 

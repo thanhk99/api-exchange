@@ -29,6 +29,9 @@ public class SpotWalletHistory {
     @Column(name = "create_dt", nullable = false)
     private LocalDateTime createDt;
 
+    @Column(name = "amount", nullable = false)
+    private BigDecimal amount;
+
     @Column(name = "balance", nullable = false)
     private BigDecimal balance;
 
