@@ -36,6 +36,15 @@ public class FundingWalletHistory {
     @Column(name = "balance", nullable = false)
     private BigDecimal balance;
 
+    @Column(name = "status")
+    private String status;
+
+    @Column(name = "address")
+    private String address;
+
+    @Column(name = "fee")
+    private BigDecimal fee;
+
     @Column(name = "note")
     private String note;
 }

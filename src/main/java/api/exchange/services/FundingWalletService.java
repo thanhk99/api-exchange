@@ -34,7 +34,8 @@ public class FundingWalletService {
     private JwtUtil jwtUtil;
 
     @Transactional
-    public ResponseEntity<?> addBalanceCoin(FundingWallet fundingWalletRes) {
+    public ResponseEntity<?> addBalanceCoin(FundingWallet fundingWalletRes, String note, String status,
+            String address, BigDecimal fee) {
         try {
             FundingWalletHistory FundingWalletHistory = new FundingWalletHistory();
             FundingWallet existingWallet = fundingWalletRepository.findByUidAndCurrency(
@@ -55,6 +56,10 @@ public class FundingWalletService {
             FundingWalletHistory.setType("Nạp tiền");
             FundingWalletHistory.setAmount(fundingWalletRes.getBalance());
             FundingWalletHistory.setCreateDt(createDt);
+            FundingWalletHistory.setNote(note != null ? note : "");
+            FundingWalletHistory.setStatus(status != null ? status : "SUCCESS");
+            FundingWalletHistory.setAddress(address);
+            FundingWalletHistory.setFee(fee != null ? fee : BigDecimal.ZERO);
             fundingWalletHistoryRepository.save(FundingWalletHistory);
             return ResponseEntity.ok(Map.of("message", "success"));
         } catch (Exception e) {
@@ -63,6 +68,20 @@ public class FundingWalletService {
         }
     }
 
+    @Transactional
+    public void updateHistory(FundingWalletHistory history) {
+        fundingWalletHistoryRepository.save(history);
+    }
+
+    @Transactional
+    public ResponseEntity<?> addBalanceCoin(FundingWallet fundingWalletRes, String note) {
+        return addBalanceCoin(fundingWalletRes, note, "SUCCESS", null, BigDecimal.ZERO);
+    }
+
+    @Transactional
+    public ResponseEntity<?> addBalanceCoin(FundingWallet fundingWalletRes) {
+        return addBalanceCoin(fundingWalletRes, null);
+    }
 
     public ResponseEntity<?> getWalletFunding(String header) {
         String jwt = header.substring(7);

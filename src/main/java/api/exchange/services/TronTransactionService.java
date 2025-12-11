@@ -15,19 +15,20 @@ public class TronTransactionService {
 
     // Send TRX from a System User (Custodial)
     public String sendTrx(String userId, String toAddress, long amount) {
+        ApiWrapper wrapper = null;
         try {
             // Retrieve and decrypt private key internally
             String fromPrivateKey = walletService.getDecryptedPrivateKey(userId);
 
-            // Use config constants to connect to the selected network (Nile)
-            ApiWrapper wrapper = new ApiWrapper(api.exchange.config.TronConfig.TRON_FULL_NODE,
-                    api.exchange.config.TronConfig.TRON_SOLIDITY_NODE,
-                    fromPrivateKey);
-            KeyPair keyPair = new KeyPair(fromPrivateKey);
+            // Use ApiWrapper.ofNile as requested
+            wrapper = ApiWrapper.ofNile(fromPrivateKey);
+            org.tron.trident.core.key.KeyPair keyPair = new org.tron.trident.core.key.KeyPair(fromPrivateKey);
             String fromAddress = keyPair.toBase58CheckAddress();
 
             // 1. Build
-            TransactionExtention txnExt = wrapper.transfer(fromAddress, toAddress, amount);
+            // Convert amount from TRX to Sun (1 TRX = 1,000,000 Sun)
+            long amountInSun = amount * 1_000_000L;
+            TransactionExtention txnExt = wrapper.transfer(fromAddress, toAddress, amountInSun);
 
             // 2. Sign
             Transaction signedTxn = wrapper.signTransaction(txnExt);
@@ -39,6 +40,10 @@ public class TronTransactionService {
 
         } catch (Exception e) {
             throw new RuntimeException("Failed to send TRX", e);
+        } finally {
+            if (wrapper != null) {
+                wrapper.close();
+            }
         }
     }
 
@@ -50,14 +55,37 @@ public class TronTransactionService {
     }
 
     public org.tron.trident.proto.Chain.Transaction getTransactionById(String txid) {
+        ApiWrapper wrapper = null;
         try {
             // Read-only wrapper
-            ApiWrapper wrapper = new ApiWrapper(api.exchange.config.TronConfig.TRON_FULL_NODE,
+            // Using the key found in original code, simplified to use ofNile for
+            // consistency if possible,
+            // but sticking to original constructor to avoid changing behavior too much,
+            // just adding close().
+            wrapper = new ApiWrapper(api.exchange.config.TronConfig.TRON_FULL_NODE,
                     api.exchange.config.TronConfig.TRON_SOLIDITY_NODE,
                     "5c42289c894957e849405d429a888065096a6668740c4a0378b8748383a15286");
             return wrapper.getTransactionById(txid);
         } catch (Exception e) {
             throw new RuntimeException("Failed to get transaction info", e);
+        } finally {
+            if (wrapper != null)
+                wrapper.close();
+        }
+    }
+
+    public long getTransactionFee(String txid) {
+        ApiWrapper wrapper = null;
+        try {
+            // Using same key
+            wrapper = ApiWrapper.ofNile("5c42289c894957e849405d429a888065096a6668740c4a0378b8748383a15286");
+            org.tron.trident.proto.Response.TransactionInfo info = wrapper.getTransactionInfoById(txid);
+            return info.getFee();
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to get transaction fee for " + txid, e);
+        } finally {
+            if (wrapper != null)
+                wrapper.close();
         }
     }
 }

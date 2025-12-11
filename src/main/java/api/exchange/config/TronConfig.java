@@ -19,6 +19,6 @@ public class TronConfig {
         // Generates a random key for the wrapper context if none provided.
         // In a real app, you might want a meaningful default or use a specific key.
         return new ApiWrapper(TRON_FULL_NODE, TRON_SOLIDITY_NODE,
-                "1111111111111111111111111111111111111111111111111111111111111111");
+                "5c42289c894957e849405d429a888065096a6668740c4a0378b8748383a15286");
     }
 }
