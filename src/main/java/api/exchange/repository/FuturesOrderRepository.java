@@ -36,6 +36,15 @@ public interface FuturesOrderRepository extends JpaRepository<FuturesOrder, Long
                         FuturesOrder.OrderType type,
                         Pageable pageable);
 
+        // For order book - get pending and partially filled limit orders by symbol and
+        // side
+        List<FuturesOrder> findBySymbolAndSideAndStatusInAndType(
+                        String symbol,
+                        FuturesOrder.OrderSide side,
+                        List<FuturesOrder.OrderStatus> statuses,
+                        FuturesOrder.OrderType type,
+                        Pageable pageable);
+
         // Public queries (no uid filter)
         List<FuturesOrder> findBySymbolAndStatusOrderByCreatedAtDesc(String symbol, FuturesOrder.OrderStatus status,
                         Pageable pageable);
@@ -53,6 +62,14 @@ public interface FuturesOrderRepository extends JpaRepository<FuturesOrder, Long
                         String uid, String symbol, FuturesOrder.OrderSide side, FuturesOrder.OrderStatus status,
                         BigDecimal price);
 
+        boolean existsByUidAndSymbolAndSideAndStatusInAndPriceLessThanEqual(
+                        String uid, String symbol, FuturesOrder.OrderSide side, List<FuturesOrder.OrderStatus> statuses,
+                        BigDecimal price);
+
+        boolean existsByUidAndSymbolAndSideAndStatusInAndPriceGreaterThanEqual(
+                        String uid, String symbol, FuturesOrder.OrderSide side, List<FuturesOrder.OrderStatus> statuses,
+                        BigDecimal price);
+
         // Matching Engine Queries
         // Buy Orders: Highest Price First, then Oldest First
         List<FuturesOrder> findBySymbolAndSideAndStatusOrderByPriceDescCreatedAtAsc(
@@ -61,4 +78,12 @@ public interface FuturesOrderRepository extends JpaRepository<FuturesOrder, Long
         // Sell Orders: Lowest Price First, then Oldest First
         List<FuturesOrder> findBySymbolAndSideAndStatusOrderByPriceAscCreatedAtAsc(
                         String symbol, FuturesOrder.OrderSide side, FuturesOrder.OrderStatus status);
+
+        // Buy Orders: Highest Price First, then Oldest First (Multiple Statuses)
+        List<FuturesOrder> findBySymbolAndSideAndStatusInOrderByPriceDescCreatedAtAsc(
+                        String symbol, FuturesOrder.OrderSide side, List<FuturesOrder.OrderStatus> statuses);
+
+        // Sell Orders: Lowest Price First, then Oldest First (Multiple Statuses)
+        List<FuturesOrder> findBySymbolAndSideAndStatusInOrderByPriceAscCreatedAtAsc(
+                        String symbol, FuturesOrder.OrderSide side, List<FuturesOrder.OrderStatus> statuses);
 }

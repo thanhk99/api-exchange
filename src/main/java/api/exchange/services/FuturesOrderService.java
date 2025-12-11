@@ -35,6 +35,9 @@ public class FuturesOrderService {
     @Autowired
     private CoinDataService coinDataService;
 
+    @Autowired
+    private api.exchange.websocket.FuturesOrderWebSocket futuresOrderWebSocket;
+
     // ==================== SCHEDULED MATCHING ====================
 
     @Scheduled(fixedRate = 1000) // Run every second
@@ -50,19 +53,23 @@ public class FuturesOrderService {
     }
 
     public Map<String, Object> getOrderBook(String symbol, int limit) {
+        List<FuturesOrder.OrderStatus> activeStatuses = Arrays.asList(
+                FuturesOrder.OrderStatus.PENDING,
+                FuturesOrder.OrderStatus.PARTIALLY_FILLED);
+
         List<FuturesOrder> buyOrders = futuresOrderRepository
-                .findBySymbolAndSideAndStatusAndType(
+                .findBySymbolAndSideAndStatusInAndType(
                         symbol,
                         FuturesOrder.OrderSide.BUY,
-                        FuturesOrder.OrderStatus.PENDING,
+                        activeStatuses,
                         FuturesOrder.OrderType.LIMIT,
                         PageRequest.of(0, limit, Sort.by("price").descending()));
 
         List<FuturesOrder> sellOrders = futuresOrderRepository
-                .findBySymbolAndSideAndStatusAndType(
+                .findBySymbolAndSideAndStatusInAndType(
                         symbol,
                         FuturesOrder.OrderSide.SELL,
-                        FuturesOrder.OrderStatus.PENDING,
+                        activeStatuses,
                         FuturesOrder.OrderType.LIMIT,
                         PageRequest.of(0, limit, Sort.by("price").ascending()));
 
@@ -187,6 +194,12 @@ public class FuturesOrderService {
         // Trigger Matching Engine
         futuresTradingService.matchOrders(symbol);
 
+        // Send WebSocket Updates
+        futuresOrderWebSocket.sendUserOrderUpdate(order);
+        if (order.getType() == FuturesOrder.OrderType.LIMIT) {
+            futuresOrderWebSocket.broadcastOrderBookUpdate(order);
+        }
+
         return order;
     }
 
@@ -223,6 +236,12 @@ public class FuturesOrderService {
 
         order.setStatus(FuturesOrder.OrderStatus.CANCELLED);
         futuresOrderRepository.save(order);
+
+        // Send WebSocket Updates
+        futuresOrderWebSocket.sendUserOrderUpdate(order);
+        if (order.getType() == FuturesOrder.OrderType.LIMIT) {
+            futuresOrderWebSocket.broadcastOrderBookUpdate(order);
+        }
     }
 
     // ==================== HELPER METHODS ====================

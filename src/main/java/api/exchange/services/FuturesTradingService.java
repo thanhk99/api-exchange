@@ -31,6 +31,9 @@ public class FuturesTradingService {
     @Autowired
     private CoinDataService coinDataService;
 
+    @Autowired
+    private api.exchange.websocket.FuturesOrderWebSocket futuresOrderWebSocket;
+
     @Transactional
     public FuturesOrder placeOrder(String uid, String symbol, FuturesOrder.OrderSide side,
             FuturesOrder.PositionSide positionSide,
@@ -86,6 +89,12 @@ public class FuturesTradingService {
         // 7. Trigger Matching Engine
         matchOrders(symbol);
 
+        // 8. Send WebSocket Updates
+        futuresOrderWebSocket.sendUserOrderUpdate(order);
+        if (order.getType() == FuturesOrder.OrderType.LIMIT) {
+            futuresOrderWebSocket.broadcastOrderBookUpdate(order);
+        }
+
         return order;
     }
 
@@ -114,6 +123,12 @@ public class FuturesTradingService {
         // Order model yet.
         // In a real system, we would have 'filledQuantity' and 'averagePrice' fields.
         futuresOrderRepository.save(order);
+
+        // Send WebSocket Updates
+        futuresOrderWebSocket.sendUserOrderUpdate(order);
+        if (order.getType() == FuturesOrder.OrderType.LIMIT) {
+            futuresOrderWebSocket.broadcastOrderBookUpdate(order);
+        }
 
         // Release Margin for the FILLED portion
         FuturesWallet wallet = futuresWalletRepository
@@ -380,6 +395,12 @@ public class FuturesTradingService {
         // 5. Update order status
         order.setStatus(FuturesOrder.OrderStatus.CANCELLED);
         futuresOrderRepository.save(order);
+
+        // Send WebSocket Updates
+        futuresOrderWebSocket.sendUserOrderUpdate(order);
+        if (order.getType() == FuturesOrder.OrderType.LIMIT) {
+            futuresOrderWebSocket.broadcastOrderBookUpdate(order);
+        }
     }
 
     /**
@@ -388,21 +409,25 @@ public class FuturesTradingService {
     public Map<String, Object> getOrderBook(String symbol, int limit) {
         Pageable pageable = PageRequest.of(0, limit);
 
+        List<FuturesOrder.OrderStatus> activeStatuses = Arrays.asList(
+                FuturesOrder.OrderStatus.PENDING,
+                FuturesOrder.OrderStatus.PARTIALLY_FILLED);
+
         // Get BUY LIMIT orders (bids), sorted by price descending (highest first)
         List<FuturesOrder> buyOrders = futuresOrderRepository
-                .findBySymbolAndSideAndStatusAndType(
+                .findBySymbolAndSideAndStatusInAndType(
                         symbol,
                         FuturesOrder.OrderSide.BUY,
-                        FuturesOrder.OrderStatus.PENDING,
+                        activeStatuses,
                         FuturesOrder.OrderType.LIMIT,
                         PageRequest.of(0, limit, Sort.by("price").descending()));
 
         // Get SELL LIMIT orders (asks), sorted by price ascending (lowest first)
         List<FuturesOrder> sellOrders = futuresOrderRepository
-                .findBySymbolAndSideAndStatusAndType(
+                .findBySymbolAndSideAndStatusInAndType(
                         symbol,
                         FuturesOrder.OrderSide.SELL,
-                        FuturesOrder.OrderStatus.PENDING,
+                        activeStatuses,
                         FuturesOrder.OrderType.LIMIT,
                         PageRequest.of(0, limit, Sort.by("price").ascending()));
 
@@ -424,16 +449,20 @@ public class FuturesTradingService {
      */
     @Transactional
     public void matchOrders(String symbol) {
+        List<FuturesOrder.OrderStatus> activeStatuses = Arrays.asList(
+                FuturesOrder.OrderStatus.PENDING,
+                FuturesOrder.OrderStatus.PARTIALLY_FILLED);
+
         // 1. Fetch Pending Orders
         // Buy Orders: Highest Price First (Best Bid)
         List<FuturesOrder> buyOrders = futuresOrderRepository
-                .findBySymbolAndSideAndStatusOrderByPriceDescCreatedAtAsc(
-                        symbol, FuturesOrder.OrderSide.BUY, FuturesOrder.OrderStatus.PENDING);
+                .findBySymbolAndSideAndStatusInOrderByPriceDescCreatedAtAsc(
+                        symbol, FuturesOrder.OrderSide.BUY, activeStatuses);
 
         // Sell Orders: Lowest Price First (Best Ask)
         List<FuturesOrder> sellOrders = futuresOrderRepository
-                .findBySymbolAndSideAndStatusOrderByPriceAscCreatedAtAsc(
-                        symbol, FuturesOrder.OrderSide.SELL, FuturesOrder.OrderStatus.PENDING);
+                .findBySymbolAndSideAndStatusInOrderByPriceAscCreatedAtAsc(
+                        symbol, FuturesOrder.OrderSide.SELL, activeStatuses);
 
         if (buyOrders.isEmpty() || sellOrders.isEmpty()) {
             return; // No liquidity to match
