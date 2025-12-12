@@ -1,6 +1,5 @@
 package api.exchange.services;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.math.BigDecimal;
@@ -11,9 +10,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.tron.trident.core.ApiWrapper;
+import org.tron.trident.core.key.KeyPair;
 
 import api.exchange.models.FundingWallet;
-import api.exchange.models.SpotHistory.TradeType;
 import api.exchange.models.FundingWalletHistory;
 import api.exchange.repository.FundingWalletRepository;
 import api.exchange.repository.FundingWalletHistoryRepository;
@@ -33,9 +33,78 @@ public class FundingWalletService {
     @Autowired
     private JwtUtil jwtUtil;
 
+    @Autowired
+    private EncryptionService encryptionService;
+
+    @Autowired
+    private SseNotificationService sseNotificationService;
+
+    @Autowired
+    private api.exchange.repository.NotificationRepository notificationRepository;
+
+    // Tron Wallet Logic merged here
+
+    public FundingWallet createTronWallet(String uid) {
+        // Check if user already has a TRX wallet
+        FundingWallet existingWallet = fundingWalletRepository.findByUidAndCurrency(uid, "TRX");
+        if (existingWallet != null && existingWallet.getAddress() != null) {
+            return existingWallet;
+        }
+
+        // Generate new key pair
+        KeyPair keyPair = KeyPair.generate();
+        String privateKey = keyPair.toPrivateKey();
+        String address = keyPair.toBase58CheckAddress();
+        String hexAddress = keyPair.toHexAddress();
+
+        // Encrypt private key
+        String encryptedPrivateKey = encryptionService.encrypt(privateKey);
+
+        if (existingWallet != null) {
+            existingWallet.setAddress(address);
+            existingWallet.setEncryptedPrivateKey(encryptedPrivateKey);
+            existingWallet.setHexAddress(hexAddress);
+            return fundingWalletRepository.save(existingWallet);
+        } else {
+            FundingWallet wallet = new FundingWallet();
+            wallet.setUid(uid);
+            wallet.setCurrency("TRX");
+            wallet.setBalance(BigDecimal.ZERO);
+            wallet.setLockedBalance(BigDecimal.ZERO);
+            wallet.setAddress(address);
+            wallet.setEncryptedPrivateKey(encryptedPrivateKey);
+            wallet.setHexAddress(hexAddress);
+            return fundingWalletRepository.save(wallet);
+        }
+    }
+
+    public long getTronBalance(String address) {
+        // Simple read-only wrapper
+        ApiWrapper wrapper = null;
+        try {
+            wrapper = new ApiWrapper(api.exchange.config.TronConfig.TRON_FULL_NODE,
+                    api.exchange.config.TronConfig.TRON_SOLIDITY_NODE,
+                    "5c42289c894957e849405d429a888065096a6668740c4a0378b8748383a15286");
+            return wrapper.getAccountBalance(address);
+        } catch (Exception e) {
+            throw new RuntimeException("Error fetching balance for address: " + address, e);
+        } finally {
+            if (wrapper != null)
+                wrapper.close();
+        }
+    }
+
+    public boolean validateTronAddress(String address) {
+        try {
+            return address != null && address.startsWith("T") && address.length() == 34;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     @Transactional
     public ResponseEntity<?> addBalanceCoin(FundingWallet fundingWalletRes, String note, String status,
-            String address, BigDecimal fee) {
+            String address, BigDecimal fee, String hash) {
         try {
             FundingWalletHistory FundingWalletHistory = new FundingWalletHistory();
             FundingWallet existingWallet = fundingWalletRepository.findByUidAndCurrency(
@@ -60,12 +129,41 @@ public class FundingWalletService {
             FundingWalletHistory.setStatus(status != null ? status : "SUCCESS");
             FundingWalletHistory.setAddress(address);
             FundingWalletHistory.setFee(fee != null ? fee : BigDecimal.ZERO);
+            FundingWalletHistory.setHash(hash); // Save Hash
             fundingWalletHistoryRepository.save(FundingWalletHistory);
+
+            // Send SSE Notification
+            try {
+                api.exchange.models.Notification notification = new api.exchange.models.Notification();
+                notification.setUserId(fundingWalletRes.getUid());
+                notification.setNotificationTitle("Nạp tiền thành công");
+                notification.setNotificationContent(String.format("Bạn đã nhận được %s %s",
+                        fundingWalletRes.getBalance().stripTrailingZeros().toPlainString(),
+                        fundingWalletRes.getCurrency()));
+                notification.setNotificationType(api.exchange.models.Notification.NotificationType.INFO);
+                notification.setNotificationType(api.exchange.models.Notification.NotificationType.INFO);
+
+                // Persist notification
+                notificationRepository.save(notification);
+
+                // Send via SSE
+                sseNotificationService.sendNotification(fundingWalletRes.getUid(), notification);
+            } catch (Exception e) {
+                log.error("Failed to send SSE notification", e);
+            }
+
             return ResponseEntity.ok(Map.of("message", "success"));
         } catch (Exception e) {
             return ResponseEntity.internalServerError()
                     .body(Map.of("message", "SERVER_ERROR", "error", e.getMessage()));
         }
+    }
+
+    // Overload for backward compatibility
+    @Transactional
+    public ResponseEntity<?> addBalanceCoin(FundingWallet fundingWalletRes, String note, String status,
+            String address, BigDecimal fee) {
+        return addBalanceCoin(fundingWalletRes, note, status, address, fee, null);
     }
 
     @Transactional
@@ -75,7 +173,7 @@ public class FundingWalletService {
 
     @Transactional
     public ResponseEntity<?> addBalanceCoin(FundingWallet fundingWalletRes, String note) {
-        return addBalanceCoin(fundingWalletRes, note, "SUCCESS", null, BigDecimal.ZERO);
+        return addBalanceCoin(fundingWalletRes, note, "SUCCESS", null, BigDecimal.ZERO, null);
     }
 
     @Transactional

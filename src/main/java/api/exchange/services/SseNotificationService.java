@@ -63,6 +63,7 @@ public class SseNotificationService {
                         .name("connected")
                         .data(welcomeMessage));
             } catch (Exception e) {
+                // log.error("Error sending welcome event", e); // Ensure logging is enabled
                 completeEmitter(userId);
             }
         });

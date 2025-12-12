@@ -24,7 +24,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilterAsyncDispatch() {
-        return false;
+        return true;
     }
 
     @Override

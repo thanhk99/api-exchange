@@ -47,4 +47,7 @@ public class FundingWalletHistory {
 
     @Column(name = "note")
     private String note;
+
+    @Column(name = "hash")
+    private String hash;
 }

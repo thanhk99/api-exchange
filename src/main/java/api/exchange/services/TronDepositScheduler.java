@@ -1,9 +1,7 @@
 package api.exchange.services;
 
 import api.exchange.models.FundingWallet;
-import api.exchange.models.TronWallet;
 import api.exchange.repository.FundingWalletHistoryRepository;
-import api.exchange.repository.TronWalletRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -23,9 +21,6 @@ import java.util.List;
 public class TronDepositScheduler {
 
     @Autowired
-    private TronWalletRepository tronWalletRepository;
-
-    @Autowired
     private FundingWalletHistoryRepository fundingWalletHistoryRepository;
 
     @Autowired
@@ -34,20 +29,25 @@ public class TronDepositScheduler {
     @Autowired
     private TronTransactionService tronTransactionService;
 
+    @Autowired
+    private api.exchange.repository.FundingWalletRepository fundingWalletRepository;
+
     private final HttpClient httpClient = HttpClient.newHttpClient();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     // Run every 30 seconds
     @Scheduled(fixedDelay = 30000)
     public void checkDeposits() {
-        List<TronWallet> wallets = tronWalletRepository.findAll();
+        List<FundingWallet> wallets = fundingWalletRepository.findAllByCurrency("TRX");
 
-        for (TronWallet wallet : wallets) {
-            checkWalletDeposits(wallet);
+        for (FundingWallet wallet : wallets) {
+            if (wallet.getAddress() != null) {
+                checkWalletDeposits(wallet);
+            }
         }
     }
 
-    public List<JsonNode> fetchTransactions(TronWallet wallet) {
+    public List<JsonNode> fetchTransactions(FundingWallet wallet) {
         List<JsonNode> transactionList = new java.util.ArrayList<>();
         try {
             String url = "https://nile.trongrid.io/v1/accounts/" + wallet.getAddress()
@@ -79,14 +79,14 @@ public class TronDepositScheduler {
         return transactionList;
     }
 
-    private void checkWalletDeposits(TronWallet wallet) {
+    private void checkWalletDeposits(FundingWallet wallet) {
         List<JsonNode> transactions = fetchTransactions(wallet);
         for (JsonNode tx : transactions) {
             processTransaction(tx, wallet);
         }
     }
 
-    private void processTransaction(JsonNode tx, TronWallet wallet) {
+    private void processTransaction(JsonNode tx, FundingWallet wallet) {
         try {
             String txId = tx.get("txID").asText();
 
@@ -142,6 +142,7 @@ public class TronDepositScheduler {
                 }
             }
             // Add TRC20 logic here later (TriggerSmartContract) if needed
+            // Add TRC20 logic here later (TriggerSmartContract) if needed
 
         } catch (Exception e) {
             log.error("Error processing transaction", e);
@@ -179,6 +180,6 @@ public class TronDepositScheduler {
         String note = String.format("Deposit %s %s from %s | Time: %s | TxID: %s",
                 amount, currency, fromAddress, timeStr, txId);
 
-        fundingWalletService.addBalanceCoin(fundingWallet, note, status, fromAddress, fee);
+        fundingWalletService.addBalanceCoin(fundingWallet, note, status, fromAddress, fee, txId); // Pass txId as hash
     }
 }

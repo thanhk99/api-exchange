@@ -29,10 +29,20 @@ public class FundingWallet {
 
     private boolean isActive = true;
 
+    // Fields merged from TronWallet
+    @Column(name = "address")
+    private String address;
+
+    @Column(name = "encrypted_private_key")
+    private String encryptedPrivateKey;
+
+    @Column(name = "hex_address")
+    private String hexAddress;
+
     public BigDecimal getAvailableBalance() {
         return balance.subtract(lockedBalance != null ? lockedBalance : BigDecimal.ZERO);
     }
-    
+
     public BigDecimal getTotalBalance() {
         return balance.add(lockedBalance != null ? lockedBalance : BigDecimal.ZERO);
     }
