@@ -12,14 +12,11 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
-import api.exchange.models.SpotWallet;
 import api.exchange.models.SpotWalletHistory;
 import api.exchange.models.OrderBooks;
 import api.exchange.models.OrderBooks.OrderStatus;
 import api.exchange.models.OrderBooks.OrderType;
-import api.exchange.models.OrderBooks.TradeType;
 import api.exchange.repository.SpotWalletHistoryRepository;
-import api.exchange.repository.SpotWalletRepository;
 import api.exchange.repository.OrderBooksRepository;
 import api.exchange.sercurity.jwt.JwtUtil;
 import api.exchange.websocket.SpotOrderWebsocket;
@@ -41,7 +38,7 @@ public class SpotService {
     private JwtUtil jwtUtil;
 
     @Autowired
-    private SpotWalletRepository spotWalletRepository;
+    private SpotWalletService spotWalletService;
 
     @Autowired
     private OrderBooksService orderBooksService;
@@ -57,10 +54,11 @@ public class SpotService {
     public ResponseEntity<?> createOrder(OrderBooks entity, String header) {
         String jwt = header.substring(7);
         String uid = jwtUtil.getUserIdFromToken(jwt);
-        if (!checkBalance(entity, uid)) {
+
+        if (!spotWalletService.checkBalance(entity, uid)) {
             return ResponseEntity.badRequest().body(Map.of("message", "Bad Request", "data", "Số dư không đủ"));
         }
-        checkWalletRecive(entity, uid);
+        spotWalletService.checkWalletRecive(entity, uid);
         OrderBooks orderBooks = orderBooksRepository.findByUidAndSymbolAndPriceAndStatusAndOrderTypeAndTradeType(uid,
                 entity.getSymbol(),
                 entity.getPrice(), OrderStatus.ACTIVE, entity.getOrderType(), entity.getTradeType());
@@ -75,7 +73,7 @@ public class SpotService {
         entity.setUid(uid);
         entity.setCreatedAt(createAt);
 
-        lockBalanceLimit(entity, uid);
+        spotWalletService.lockBalanceLimit(entity, uid);
 
         BigDecimal balance;
         String asset = "";
@@ -105,73 +103,23 @@ public class SpotService {
 
     @Transactional
     public ResponseEntity<?> cancleOrder(Long orderId) {
-        Optional<OrderBooks> orderBooks = orderBooksRepository.findById(orderId);
-        if (!orderBooks.isPresent()) {
+        Optional<OrderBooks> orderOpt = orderBooksRepository.findById(orderId);
+        if (!orderOpt.isPresent()) {
             return ResponseEntity.badRequest().body(Map.of("message", "Bad Request", "data", "Không tìm thấy id"));
         }
-        if (orderBooks.get().getStatus() == OrderStatus.ACTIVE) {
-            return ResponseEntity.ok(Map.of("message", "success", "data", "Huỷ lệnh thành công"));
+
+        OrderBooks order = orderOpt.get();
+
+        if (orderOpt.get().getStatus() == OrderStatus.ACTIVE || order.getStatus() == OrderStatus.PARTIALLY_FILLED) {
+            // For example: unlockBalance(order);
+            order.setStatus(OrderStatus.CANCELLED);
+            order.setUpdatedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
+            orderBooksRepository.save(order);
         }
         return ResponseEntity.badRequest().body(Map.of("message", "Bad Request", "data", "Không thể huỷ lệnh "));
     }
 
-    public Boolean checkBalance(OrderBooks entity, String uid) {
-        String[] parts = entity.getSymbol().split("/");
-        String coin = parts[0];
-        String stable = parts[1];
-
-        if (entity.getTradeType().equals(TradeType.MARKET) && entity.getOrderType().equals(OrderType.BUY)) {
-            BigDecimal priceCoin = orderBooksService.getLastTradedPrice(entity.getSymbol());
-
-            SpotWallet spotWallet = spotWalletRepository.findByUidAndCurrency(uid, stable);
-            if (spotWallet == null) {
-                return false;
-            }
-            if (spotWallet.getBalance().compareTo(entity.getQuantity().multiply(priceCoin)) < 0) {
-                return false;
-            }
-        } else {
-            if (entity.getOrderType().equals(OrderType.BUY)) {
-                SpotWallet fundingWallet = spotWalletRepository.findByUidAndCurrency(uid, stable);
-                if (fundingWallet == null) {
-                    return false;
-                }
-                if (fundingWallet.getBalance().compareTo(entity.getPrice().multiply(entity.getQuantity())) < 0) {
-                    return false;
-                }
-            } else {
-                SpotWallet fundingWallet = spotWalletRepository.findByUidAndCurrency(uid, coin);
-                if (fundingWallet == null) {
-                    return false;
-                }
-                if (fundingWallet.getBalance().compareTo(entity.getQuantity()) < 0) {
-                    return false;
-                }
-            }
-
-        }
-        return true;
-    }
-
-    public void lockBalanceLimit(OrderBooks entity, String uid) {
-        String[] parts = entity.getSymbol().split("/");
-        String coin = parts[0];
-        String stable = parts[1];
-        if (entity.getTradeType().equals(TradeType.LIMIT)) {
-            if (entity.getOrderType().equals(OrderType.BUY)) {
-                SpotWallet spotWallet = spotWalletRepository.findByUidAndCurrency(uid, stable);
-                BigDecimal totalStableCoin = entity.getPrice().multiply(entity.getQuantity());
-                spotWallet.setLockedBalance(spotWallet.getLockedBalance().add(totalStableCoin));
-                spotWallet.setBalance(spotWallet.getBalance().subtract(totalStableCoin));
-                spotWalletRepository.save(spotWallet);
-            } else {
-                SpotWallet spotWallet = spotWalletRepository.findByUidAndCurrency(uid, coin);
-                spotWallet.setLockedBalance(spotWallet.getLockedBalance().add(entity.getQuantity()));
-                spotWallet.setBalance(spotWallet.getBalance().subtract(entity.getQuantity()));
-                spotWalletRepository.save(spotWallet);
-            }
-        }
-    }
+    // Methods moved to SpotWalletService
 
     @Transactional
     public void checkWalletRecive(OrderBooks entity, String uid) {
