@@ -3,6 +3,7 @@ package api.exchange.services;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -28,7 +29,7 @@ import jakarta.transaction.Transactional;
 public class SpotService {
 
     @Autowired
-    private  SpotWalletHistoryRepository spotWalletHistoryRepository;
+    private SpotWalletHistoryRepository spotWalletHistoryRepository;
 
     @Autowired
     private ApplicationEventPublisher eventPublisher;
@@ -78,11 +79,11 @@ public class SpotService {
 
         BigDecimal balance;
         String asset = "";
-        if(entity.getOrderType().equals(OrderType.BUY)){
-            balance= entity.getPrice().multiply(entity.getQuantity());
+        if (entity.getOrderType().equals(OrderType.BUY)) {
+            balance = entity.getPrice().multiply(entity.getQuantity());
             asset = entity.getSymbol().split("/")[1];
-        }else{
-            balance= entity.getQuantity();
+        } else {
+            balance = entity.getQuantity();
             asset = entity.getSymbol().split("/")[0];
         }
         SpotWalletHistory spotWalletHistory = new SpotWalletHistory();
@@ -200,5 +201,41 @@ public class SpotService {
                 spotWalletRepository.save(newWallet);
             }
         }
+    }
+
+    public Map<String, Object> getOrderBook(String symbol, int limit) {
+        // Get BUY LIMIT orders (bids), sorted by price descending (highest first)
+        List<OrderBooks> buyOrders = orderBooksRepository.findBuyOrderBooks(symbol);
+
+        // Get SELL LIMIT orders (asks), sorted by price ascending (lowest first)
+        List<OrderBooks> sellOrders = orderBooksRepository.findSellOrderBooks(symbol);
+
+        // Aggregate orders by price level
+        List<List<String>> bids = aggregateOrdersByPrice(buyOrders, limit);
+        List<List<String>> asks = aggregateOrdersByPrice(sellOrders, limit);
+
+        return Map.of(
+                "symbol", symbol,
+                "timestamp", System.currentTimeMillis(),
+                "bids", bids,
+                "asks", asks);
+    }
+
+    private List<List<String>> aggregateOrdersByPrice(List<OrderBooks> orders, int limit) {
+        Map<BigDecimal, BigDecimal> priceMap = new java.util.LinkedHashMap<>();
+
+        for (OrderBooks order : orders) {
+            // Only aggregate LIMIT orders that are not fully filled
+            if (order.getTradeType() == TradeType.LIMIT) {
+                priceMap.merge(order.getPrice(), order.getRemainingQuantity(), BigDecimal::add);
+            }
+        }
+
+        return priceMap.entrySet().stream()
+                .limit(limit)
+                .map(e -> java.util.Arrays.asList(
+                        e.getKey().toPlainString(),
+                        e.getValue().toPlainString()))
+                .collect(java.util.stream.Collectors.toList());
     }
 }

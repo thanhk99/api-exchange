@@ -28,6 +28,14 @@ public class FundingWalletHistoryService {
 
             List<FundingWalletHistory> listTxFunding = new ArrayList<>();
             listTxFunding = fundingWalletHistoryRepository.findByUserId(uid);
+
+            // Map status unconfirm -> pending
+            for (FundingWalletHistory history : listTxFunding) {
+                if ("unconfirm".equalsIgnoreCase(history.getStatus())) {
+                    history.setStatus("pending");
+                }
+            }
+
             return ResponseEntity.ok(Map.of("message", "success", "data", listTxFunding));
         } catch (Exception e) {
             return ResponseEntity.internalServerError()

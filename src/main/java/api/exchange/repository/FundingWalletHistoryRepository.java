@@ -10,4 +10,7 @@ public interface FundingWalletHistoryRepository extends JpaRepository<FundingWal
 
     List<FundingWalletHistory> findByUserId(String uid);
 
+    boolean existsByNoteContaining(String note);
+
+    FundingWalletHistory findFirstByNoteContaining(String note);
 }

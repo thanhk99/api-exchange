@@ -3,6 +3,7 @@ package api.exchange.models;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
@@ -13,46 +14,12 @@ import java.time.LocalDateTime;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class SpotKlineData1m {
+@EqualsAndHashCode(callSuper = true)
+public class SpotKlineData1m extends BaseKlineData {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-
-    @Column(name = "symbol", nullable = false, length = 20)
-    private String symbol;
-
-    @Column(name = "open_price", precision = 20, scale = 8)
-    private BigDecimal openPrice;
-
-    @Column(name = "close_price", precision = 20, scale = 8)
-    private BigDecimal closePrice;
-
-    @Column(name = "high_price", precision = 20, scale = 8)
-    private BigDecimal highPrice;
-
-    @Column(name = "low_price", precision = 20, scale = 8)
-    private BigDecimal lowPrice;
-
-    @Column(name = "volume", precision = 20, scale = 8)
-    private BigDecimal volume;
-
-    @Column(name = "start_time")
-    private LocalDateTime startTime;
-
-    @Column(name = "close_time")
-    private LocalDateTime closeTime;
-
-    @Column(name = "is_closed")
-    private Boolean isClosed;
-
-    @Column(name = "created_at")
-    private LocalDateTime createdAt;
-
-    @PrePersist
-    protected void onCreate() {
-        createdAt = LocalDateTime.now();
-    }
 
     // Constructor để tạo từ KlinesSpotResponse
     public SpotKlineData1m(String symbol, BigDecimal openPrice,

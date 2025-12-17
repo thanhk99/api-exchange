@@ -8,7 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
-import api.exchange.dtos.Requset.PasswordRequest;
+import api.exchange.dtos.Request.PasswordRequest;
 import api.exchange.models.User;
 import api.exchange.repository.UserRepository;
 import api.exchange.sercurity.jwt.JwtUtil;

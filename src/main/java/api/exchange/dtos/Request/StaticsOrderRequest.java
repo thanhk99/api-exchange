@@ -1,4 +1,4 @@
-package api.exchange.dtos.Requset;
+package api.exchange.dtos.Request;
 
 import java.time.LocalDate;
 import lombok.*;
@@ -9,8 +9,8 @@ import lombok.*;
 @Setter
 @Getter
 public class StaticsOrderRequest {
-    private String tradeType ;
+    private String tradeType;
     private LocalDate startDate;
-    private LocalDate endDate ;
-    private String status; 
+    private LocalDate endDate;
+    private String status;
 }

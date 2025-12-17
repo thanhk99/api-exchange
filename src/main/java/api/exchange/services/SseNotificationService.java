@@ -13,12 +13,12 @@ import api.exchange.models.Notification;
 
 @Service
 public class SseNotificationService {
-    private final ConcurrentHashMap<Long, SseEmitter> emitters = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, SseEmitter> emitters = new ConcurrentHashMap<>();
     private final ExecutorService executor = Executors.newCachedThreadPool();
 
     private static final long SSE_TIMEOUT = 30 * 60 * 1000L; // 30 minutes
 
-    public SseEmitter subscribe(Long userId) {
+    public SseEmitter subscribe(String userId) {
         // Remove existing emitter if any
         completeEmitter(userId);
 
@@ -35,7 +35,7 @@ public class SseNotificationService {
         return emitter;
     }
 
-    public void sendNotification(Long userId, Notification message) {
+    public void sendNotification(String userId, Notification message) {
         SseEmitter emitter = emitters.get(userId);
         if (emitter != null) {
             sendEvent(emitter, "notification", message);
@@ -48,14 +48,14 @@ public class SseNotificationService {
         });
     }
 
-    public void completeEmitter(Long userId) {
+    public void completeEmitter(String userId) {
         SseEmitter emitter = emitters.remove(userId);
         if (emitter != null) {
             emitter.complete();
         }
     }
 
-    private void sendWelcomeEvent(SseEmitter emitter, Long userId) {
+    private void sendWelcomeEvent(SseEmitter emitter, String userId) {
         executor.execute(() -> {
             try {
                 String welcomeMessage = "SSE connection established for user: " + userId;
@@ -63,6 +63,7 @@ public class SseNotificationService {
                         .name("connected")
                         .data(welcomeMessage));
             } catch (Exception e) {
+                // log.error("Error sending welcome event", e); // Ensure logging is enabled
                 completeEmitter(userId);
             }
         });
@@ -81,7 +82,7 @@ public class SseNotificationService {
         });
     }
 
-    private Long findUserIdByEmitter(SseEmitter targetEmitter) {
+    private String findUserIdByEmitter(SseEmitter targetEmitter) {
         return emitters.entrySet().stream()
                 .filter(entry -> entry.getValue().equals(targetEmitter))
                 .map(entry -> entry.getKey())
@@ -90,12 +91,12 @@ public class SseNotificationService {
     }
 
     // Helper method to get all connected users
-    public List<Long> getConnectedUsers() {
+    public List<String> getConnectedUsers() {
         return new ArrayList<>(emitters.keySet());
     }
 
     // Helper method to check if user is connected
-    public boolean isUserConnected(Long userId) {
+    public boolean isUserConnected(String userId) {
         return emitters.containsKey(userId);
     }
 }

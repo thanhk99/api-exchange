@@ -16,12 +16,12 @@ public class SseNotificationController {
     private SseNotificationService sseNotificationService;
 
     @GetMapping(value = "/subscribe/{userId}", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter subscribe(@PathVariable Long userId) {
+    public SseEmitter subscribe(@PathVariable String userId) {
         return sseNotificationService.subscribe(userId);
     }
 
     @PostMapping("/notify/{userId}")
-    public void sendNotification(@PathVariable Long userId,
+    public void sendNotification(@PathVariable String userId,
             @RequestBody Notification message) {
         sseNotificationService.sendNotification(userId, message);
     }

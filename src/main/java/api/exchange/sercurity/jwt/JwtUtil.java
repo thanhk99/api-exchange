@@ -46,7 +46,6 @@ public class JwtUtil {
     @Autowired
     private TokenBlacklistRepository tokenBlacklistRepository;
 
-
     public JwtUtil(@Value("${jwt.secret}") String secret) {
         try {
             // Kiểm tra secret key không null hoặc rỗng
@@ -85,7 +84,7 @@ public class JwtUtil {
     }
 
     // Tạo refresh token và lưu vào database
-    public refreshToken generateRefreshToken(User user , String deviceId) {
+    public refreshToken generateRefreshToken(User user, String deviceId) {
         // Xóa token cũ nếu tồn tại
         refreshTokenRepository.findByUser(user)
                 .ifPresent(refreshTokenRepository::delete);
@@ -105,7 +104,6 @@ public class JwtUtil {
     // Xác thực token
     public boolean validateToken(String token) {
         try {
-            System.out.println(token);
             // Kiểm tra trong blacklist
             if (tokenBlacklistRepository.existsByToken(token)) {
                 return false;
