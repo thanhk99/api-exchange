@@ -24,11 +24,12 @@ public class FuturesKlineController {
      */
     @PostMapping("/symbol")
     public ResponseEntity<Map<String, Object>> getKlineData(@RequestBody FuturesKlineRequest request,
-            @RequestParam(defaultValue = "72") int limit) {
+            @RequestParam(defaultValue = "72") int limit,
+            @RequestParam(required = false) Long endTime) {
 
         try {
             List<KlinesFuturesResponse> klineData = getKlineDataByInterval(request.getSymbol(), request.getInterval(),
-                    limit);
+                    limit, endTime);
 
             Map<String, Object> response = new HashMap<>();
             response.put("symbol", request.getSymbol().toUpperCase());
@@ -55,22 +56,23 @@ public class FuturesKlineController {
     /**
      * Lấy dữ liệu kline theo khoảng thời gian
      */
-    private List<KlinesFuturesResponse> getKlineDataByInterval(String symbol, String interval, int limit) {
+    private List<KlinesFuturesResponse> getKlineDataByInterval(String symbol, String interval, int limit,
+            Long endTime) {
         switch (interval.toLowerCase()) {
             case "1s":
-                return futuresKlineCalculationService.get1sKlines(symbol, limit);
+                return futuresKlineCalculationService.get1sKlines(symbol, limit, endTime);
             case "1m":
-                return futuresKlineCalculationService.get1mKlines(symbol, limit);
+                return futuresKlineCalculationService.get1mKlines(symbol, limit, endTime);
             case "5m":
-                return futuresKlineCalculationService.calculate5mKlines(symbol, limit);
+                return futuresKlineCalculationService.calculate5mKlines(symbol, limit, endTime);
             case "15m":
-                return futuresKlineCalculationService.calculate15mKlines(symbol, limit);
+                return futuresKlineCalculationService.calculate15mKlines(symbol, limit, endTime);
             case "1h":
-                return futuresKlineCalculationService.get1hKlines(symbol, limit);
+                return futuresKlineCalculationService.get1hKlines(symbol, limit, endTime);
             case "6h":
-                return futuresKlineCalculationService.calculate6hKlines(symbol, limit);
+                return futuresKlineCalculationService.calculate6hKlines(symbol, limit, endTime);
             case "12h":
-                return futuresKlineCalculationService.calculate12hKlines(symbol, limit);
+                return futuresKlineCalculationService.calculate12hKlines(symbol, limit, endTime);
             default:
                 throw new IllegalArgumentException("Khoảng thời gian không được hỗ trợ: " + interval);
         }
@@ -136,7 +138,7 @@ public class FuturesKlineController {
             @PathVariable String interval) {
 
         try {
-            List<KlinesFuturesResponse> klineData = getKlineDataByInterval(symbol, interval, 1);
+            List<KlinesFuturesResponse> klineData = getKlineDataByInterval(symbol, interval, 1, null);
 
             Map<String, Object> response = new HashMap<>();
             response.put("symbol", symbol.toUpperCase());
@@ -178,7 +180,7 @@ public class FuturesKlineController {
             Map<String, List<KlinesFuturesResponse>> allData = new HashMap<>();
 
             for (String symbol : symbols) {
-                List<KlinesFuturesResponse> klineData = getKlineDataByInterval(symbol, interval, limit);
+                List<KlinesFuturesResponse> klineData = getKlineDataByInterval(symbol, interval, limit, null);
                 allData.put(symbol, klineData);
             }
 

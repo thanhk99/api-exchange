@@ -33,4 +33,11 @@ public interface FuturesKlineData1hRepository extends JpaRepository<FuturesKline
      * Xóa dữ liệu cũ hơn cutoff time
      */
     void deleteByStartTimeBefore(LocalDateTime cutoffTime);
+
+    /**
+     * Lấy N kline gần nhất trước một thời điểm cụ thể
+     */
+    @Query("SELECT k FROM FuturesKlineData1h k WHERE k.symbol = :symbol AND k.startTime < :endTime ORDER BY k.startTime DESC LIMIT :limit")
+    List<FuturesKlineData1h> findBySymbolAndStartTimeBeforeOrderByStartTimeDesc(@Param("symbol") String symbol,
+            @Param("endTime") LocalDateTime endTime, @Param("limit") int limit);
 }

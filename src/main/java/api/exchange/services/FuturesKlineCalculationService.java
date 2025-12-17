@@ -31,7 +31,7 @@ public class FuturesKlineCalculationService {
     /**
      * Lấy dữ liệu kline 1s từ Redis (nếu có) hoặc database
      */
-    public List<KlinesFuturesResponse> get1sKlines(String symbol, int limit) {
+    public List<KlinesFuturesResponse> get1sKlines(String symbol, int limit, Long endTime) {
         List<KlinesFuturesResponse> result = new ArrayList<>();
 
         try {
@@ -46,8 +46,18 @@ public class FuturesKlineCalculationService {
             }
 
             // 2. Nếu không có trong cache, lấy từ DB
-            List<api.exchange.models.FuturesKlineData1s> klines1s = futuresKlineData1sRepository
-                    .findLatestKlines(symbol, limit);
+            List<api.exchange.models.FuturesKlineData1s> klines1s;
+            if (endTime != null && endTime > 0) {
+                // Convert timestamp to LocalDateTime if needed or just query directly if
+                // repository supports it.
+                // Assuming 1s repo doesn't have the method yet, falling back to latest for now
+                // or we should add it.
+                // For this task, we focus on 1m and 1h as per plan, but let's keep consistent
+                // signature
+                klines1s = futuresKlineData1sRepository.findLatestKlines(symbol, limit);
+            } else {
+                klines1s = futuresKlineData1sRepository.findLatestKlines(symbol, limit);
+            }
 
             for (api.exchange.models.FuturesKlineData1s kline : klines1s) {
                 if (result.size() >= limit)
@@ -82,13 +92,21 @@ public class FuturesKlineCalculationService {
     /**
      * Tính toán dữ liệu kline 5m từ dữ liệu 1m
      */
-    public List<KlinesFuturesResponse> calculate5mKlines(String symbol, int limit) {
+    public List<KlinesFuturesResponse> calculate5mKlines(String symbol, int limit, Long endTime) {
         List<KlinesFuturesResponse> result = new ArrayList<>();
 
         try {
             // Lấy dữ liệu 1m gần nhất (cần limit * 5 nến 1m để tạo limit nến 5m)
             int requiredKlines = Math.min(limit * 5, 500); // Giới hạn tối đa 500 klines
-            List<FuturesKlineData1m> klines1m = futuresKlineData1mRepository.findLatestKlines(symbol, requiredKlines);
+            List<FuturesKlineData1m> klines1m;
+            if (endTime != null && endTime > 0) {
+                java.time.LocalDateTime endDateTime = java.time.LocalDateTime
+                        .ofInstant(java.time.Instant.ofEpochMilli(endTime), java.time.ZoneId.systemDefault());
+                klines1m = futuresKlineData1mRepository.findBySymbolAndStartTimeBeforeOrderByStartTimeDesc(symbol,
+                        endDateTime, requiredKlines);
+            } else {
+                klines1m = futuresKlineData1mRepository.findLatestKlines(symbol, requiredKlines);
+            }
 
             if (klines1m.size() < 5) {
                 return result;
@@ -117,13 +135,21 @@ public class FuturesKlineCalculationService {
     /**
      * Tính toán dữ liệu kline 15m từ dữ liệu 1m
      */
-    public List<KlinesFuturesResponse> calculate15mKlines(String symbol, int limit) {
+    public List<KlinesFuturesResponse> calculate15mKlines(String symbol, int limit, Long endTime) {
         List<KlinesFuturesResponse> result = new ArrayList<>();
 
         try {
             // Lấy dữ liệu 1m gần nhất (cần limit * 15 nến 1m để tạo limit nến 15m)
             int requiredKlines = Math.min(limit * 15, 500);
-            List<FuturesKlineData1m> klines1m = futuresKlineData1mRepository.findLatestKlines(symbol, requiredKlines);
+            List<FuturesKlineData1m> klines1m;
+            if (endTime != null && endTime > 0) {
+                java.time.LocalDateTime endDateTime = java.time.LocalDateTime
+                        .ofInstant(java.time.Instant.ofEpochMilli(endTime), java.time.ZoneId.systemDefault());
+                klines1m = futuresKlineData1mRepository.findBySymbolAndStartTimeBeforeOrderByStartTimeDesc(symbol,
+                        endDateTime, requiredKlines);
+            } else {
+                klines1m = futuresKlineData1mRepository.findLatestKlines(symbol, requiredKlines);
+            }
 
             if (klines1m.size() < 15) {
                 return result;
@@ -152,13 +178,21 @@ public class FuturesKlineCalculationService {
     /**
      * Tính toán dữ liệu kline 6h từ dữ liệu 1h
      */
-    public List<KlinesFuturesResponse> calculate6hKlines(String symbol, int limit) {
+    public List<KlinesFuturesResponse> calculate6hKlines(String symbol, int limit, Long endTime) {
         List<KlinesFuturesResponse> result = new ArrayList<>();
 
         try {
             // Lấy dữ liệu 1h gần nhất (cần limit * 6 nến 1h để tạo limit nến 6h)
             int requiredKlines = Math.min(limit * 6, 500);
-            List<FuturesKlineData1h> klines1h = futuresKlineData1hRepository.findLatestKlines(symbol, requiredKlines);
+            List<FuturesKlineData1h> klines1h;
+            if (endTime != null && endTime > 0) {
+                java.time.LocalDateTime endDateTime = java.time.LocalDateTime
+                        .ofInstant(java.time.Instant.ofEpochMilli(endTime), java.time.ZoneId.systemDefault());
+                klines1h = futuresKlineData1hRepository.findBySymbolAndStartTimeBeforeOrderByStartTimeDesc(symbol,
+                        endDateTime, requiredKlines);
+            } else {
+                klines1h = futuresKlineData1hRepository.findLatestKlines(symbol, requiredKlines);
+            }
 
             if (klines1h.size() < 6) {
                 return result;
@@ -187,13 +221,21 @@ public class FuturesKlineCalculationService {
     /**
      * Tính toán dữ liệu kline 12h từ dữ liệu 1h
      */
-    public List<KlinesFuturesResponse> calculate12hKlines(String symbol, int limit) {
+    public List<KlinesFuturesResponse> calculate12hKlines(String symbol, int limit, Long endTime) {
         List<KlinesFuturesResponse> result = new ArrayList<>();
 
         try {
             // Lấy dữ liệu 1h gần nhất (cần limit * 12 nến 1h để tạo limit nến 12h)
             int requiredKlines = Math.min(limit * 12, 500);
-            List<FuturesKlineData1h> klines1h = futuresKlineData1hRepository.findLatestKlines(symbol, requiredKlines);
+            List<FuturesKlineData1h> klines1h;
+            if (endTime != null && endTime > 0) {
+                java.time.LocalDateTime endDateTime = java.time.LocalDateTime
+                        .ofInstant(java.time.Instant.ofEpochMilli(endTime), java.time.ZoneId.systemDefault());
+                klines1h = futuresKlineData1hRepository.findBySymbolAndStartTimeBeforeOrderByStartTimeDesc(symbol,
+                        endDateTime, requiredKlines);
+            } else {
+                klines1h = futuresKlineData1hRepository.findLatestKlines(symbol, requiredKlines);
+            }
 
             if (klines1h.size() < 12) {
                 return result;
@@ -304,11 +346,19 @@ public class FuturesKlineCalculationService {
     /**
      * Lấy dữ liệu kline 1m trực tiếp từ database
      */
-    public List<KlinesFuturesResponse> get1mKlines(String symbol, int limit) {
+    public List<KlinesFuturesResponse> get1mKlines(String symbol, int limit, Long endTime) {
         List<KlinesFuturesResponse> result = new ArrayList<>();
 
         try {
-            List<FuturesKlineData1m> klines1m = futuresKlineData1mRepository.findLatestKlines(symbol, limit);
+            List<FuturesKlineData1m> klines1m;
+            if (endTime != null && endTime > 0) {
+                java.time.LocalDateTime endDateTime = java.time.LocalDateTime
+                        .ofInstant(java.time.Instant.ofEpochMilli(endTime), java.time.ZoneId.systemDefault());
+                klines1m = futuresKlineData1mRepository.findBySymbolAndStartTimeBeforeOrderByStartTimeDesc(symbol,
+                        endDateTime, limit);
+            } else {
+                klines1m = futuresKlineData1mRepository.findLatestKlines(symbol, limit);
+            }
 
             for (FuturesKlineData1m kline : klines1m) {
                 if (result.size() >= limit)
@@ -338,11 +388,19 @@ public class FuturesKlineCalculationService {
     /**
      * Lấy dữ liệu kline 1h trực tiếp từ database
      */
-    public List<KlinesFuturesResponse> get1hKlines(String symbol, int limit) {
+    public List<KlinesFuturesResponse> get1hKlines(String symbol, int limit, Long endTime) {
         List<KlinesFuturesResponse> result = new ArrayList<>();
 
         try {
-            List<FuturesKlineData1h> klines1h = futuresKlineData1hRepository.findLatestKlines(symbol, limit);
+            List<FuturesKlineData1h> klines1h;
+            if (endTime != null && endTime > 0) {
+                java.time.LocalDateTime endDateTime = java.time.LocalDateTime
+                        .ofInstant(java.time.Instant.ofEpochMilli(endTime), java.time.ZoneId.systemDefault());
+                klines1h = futuresKlineData1hRepository.findBySymbolAndStartTimeBeforeOrderByStartTimeDesc(symbol,
+                        endDateTime, limit);
+            } else {
+                klines1h = futuresKlineData1hRepository.findLatestKlines(symbol, limit);
+            }
 
             for (FuturesKlineData1h kline : klines1h) {
                 if (result.size() >= limit)

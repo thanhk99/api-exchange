@@ -40,10 +40,11 @@ public class FundingWallet {
     private String hexAddress;
 
     public BigDecimal getAvailableBalance() {
-        return balance.subtract(lockedBalance != null ? lockedBalance : BigDecimal.ZERO);
+        return balance != null ? balance : BigDecimal.ZERO;
     }
 
     public BigDecimal getTotalBalance() {
-        return balance.add(lockedBalance != null ? lockedBalance : BigDecimal.ZERO);
+        return (balance != null ? balance : BigDecimal.ZERO)
+                .add(lockedBalance != null ? lockedBalance : BigDecimal.ZERO);
     }
 }

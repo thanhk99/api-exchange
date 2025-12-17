@@ -34,10 +34,12 @@ public class FuturesMarketDataService {
 
     // Only symbols available on Binance Futures (verified)
     private static final List<String> SYMBOLS = Arrays.asList(
-            "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT",
-            "ADAUSDT", "DOGEUSDT", "TRXUSDT", "DOTUSDT", "LTCUSDT",
-            "BCHUSDT", "LINKUSDT", "XLMUSDT", "ATOMUSDT", "UNIUSDT",
-            "AVAXUSDT", "NEARUSDT", "FILUSDT", "ICPUSDT", "ETCUSDT");
+            "BTCUSDT"
+    // "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT",
+    // "ADAUSDT", "DOGEUSDT", "TRXUSDT", "DOTUSDT", "LTCUSDT",
+    // "BCHUSDT", "LINKUSDT", "XLMUSDT", "ATOMUSDT", "UNIUSDT",
+    // "AVAXUSDT", "NEARUSDT", "FILUSDT", "ICPUSDT", "ETCUSDT"
+    );
 
     // Logo URLs (reuse from CoinDataService)
     private static final Map<String, String> LOGO_URLS = Map.ofEntries(

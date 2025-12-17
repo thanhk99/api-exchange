@@ -53,6 +53,7 @@ public class P2PADService {
     @Autowired
     private PaymentMethodRepository paymentMethodRepository;
 
+    @Transactional
     public ResponseEntity<?> createAddP2P(P2PAd p2pAd, String authHeader) {
         try {
             String token = authHeader.substring(7);
@@ -63,7 +64,8 @@ public class P2PADService {
             if (ListP2PAd != null) {
                 for (P2PAd p2pAdInfo : ListP2PAd) {
                     // Basic duplicate check - can be refined
-                    if (p2pAd.getPrice().compareTo(p2pAdInfo.getPrice()) == 0
+                    if (Boolean.TRUE.equals(p2pAdInfo.getIsActive())
+                            && p2pAd.getPrice().compareTo(p2pAdInfo.getPrice()) == 0
                             && p2pAd.getTradeType().equals(p2pAdInfo.getTradeType())
                             && p2pAd.getAsset().equals(p2pAdInfo.getAsset())) {
                         // For SELL ads, check if same payment method ID

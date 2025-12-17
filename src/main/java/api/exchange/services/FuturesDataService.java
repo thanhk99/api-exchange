@@ -48,10 +48,12 @@ public class FuturesDataService {
 
     // Các symbols được theo dõi (Top futures contracts)
     private static final List<String> SYMBOLS = Arrays.asList(
-            "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT",
-            "ADAUSDT", "DOGEUSDT", "TRXUSDT", "DOTUSDT", "LTCUSDT",
-            "BCHUSDT", "LINKUSDT", "XLMUSDT", "ATOMUSDT", "UNIUSDT",
-            "AVAXUSDT", "NEARUSDT", "FILUSDT", "ICPUSDT", "ETCUSDT");
+            "BTCUSDT"
+    // "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT",
+    // "ADAUSDT", "DOGEUSDT", "TRXUSDT", "DOTUSDT", "LTCUSDT",
+    // "BCHUSDT", "LINKUSDT", "XLMUSDT", "ATOMUSDT", "UNIUSDT",
+    // "AVAXUSDT", "NEARUSDT", "FILUSDT", "ICPUSDT", "ETCUSDT"
+    );
 
     /**
      * Lấy dữ liệu kline từ Binance Futures API
