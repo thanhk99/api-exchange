@@ -1,6 +1,6 @@
 package api.exchange.controllers;
 
-import api.exchange.dtos.Requset.SpotKlineRequest;
+import api.exchange.dtos.Request.SpotKlineRequest;
 import api.exchange.dtos.Response.KlinesSpotResponse;
 import api.exchange.services.KlineCalculationService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,9 +18,9 @@ public class SpotKlineController {
 
     @Autowired
     private KlineCalculationService klineCalculationService;
-    
+
     // Lấy dữ liệu kline của một symbol với khoảng thời gian cụ thể
-    
+
     @PostMapping("/symbol")
     public ResponseEntity<Map<String, Object>> getKlineData(@RequestBody SpotKlineRequest request,
             @RequestParam(defaultValue = "72") int limit) {

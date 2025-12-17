@@ -1,51 +1,69 @@
-#Build stage 
+# ===================================================================
+# GIAI ĐOẠN 1: BUILD (Biên dịch và đóng gói ứng dụng)
+# Sử dụng base image JDK 21, khớp với phiên bản trong pom.xml của bạn
+# ===================================================================
 FROM eclipse-temurin:21-jdk-jammy as builder
 
-WORKDIR /workspace/app 
+# Đặt thư mục làm việc bên trong container
+WORKDIR /workspace/app
 
-# Copy các file cấu hình Maven trước để tận dụng Docker cache
+# Tận dụng Docker cache:
+# Chỉ copy những file cần thiết để download dependencies trước
 COPY mvnw .
 COPY .mvn .mvn
 RUN chmod +x mvnw
 COPY pom.xml .
 
-# Download dependencies trước (tận dụng cache layer)
+# Chạy lệnh download dependencies của Maven
+# Nếu pom.xml không đổi, layer này sẽ được cache lại, build sẽ nhanh hơn
 RUN ./mvnw dependency:go-offline
-# Copy source code
+
+# Copy toàn bộ source code của bạn vào
 COPY src src
 
-# Build ứng dụng và bỏ qua tests
-# RUN ./mvnw clean package -DskipTests
+# Build ứng dụng thành file JAR, bỏ qua việc chạy test để tăng tốc
+RUN ./mvnw clean package -DskipTests
 
-# Tách file JAR thành các thư mục riêng để tối ưu
+# Tạo một thư mục để giải nén file JAR, phục vụ cho việc tối ưu layer
 RUN mkdir -p target/dependency && (cd target/dependency; jar -xf ../*.jar)
 
-# Runtime stage - chỉ sử dụng JRE để giảm kích thước
+# ===================================================================
+# GIAI ĐOẠN 2: RUNTIME (Chạy ứng dụng)
+# Sử dụng base image JRE 21 để image cuối cùng nhẹ và an toàn hơn
+# ===================================================================
 FROM eclipse-temurin:21-jre-jammy
 
-# Thư mục làm việc
+# Đặt thư mục làm việc cho ứng dụng
 WORKDIR /app
 
-# Thêm volume cho thư mục tạm
+# Tạo volume cho thư mục /tmp, là một best practice cho ứng dụng Spring Boot
 VOLUME /tmp
 
-# Sao chép các phần cần thiết từ stage builder
+# Lấy các phần đã được tách ra từ giai đoạn build
 ARG DEPENDENCY=/workspace/app/target/dependency
+
+# Copy các thư viện (dependencies)
 COPY --from=builder ${DEPENDENCY}/BOOT-INF/lib /app/lib
+
+# Copy metadata của ứng dụng
 COPY --from=builder ${DEPENDENCY}/META-INF /app/META-INF
+
+# Copy code đã được biên dịch của bạn
 COPY --from=builder ${DEPENDENCY}/BOOT-INF/classes /app
 
-# Thiết lập biến môi trường (nếu cần)
-# ENV SPRING_PROFILES_ACTIVE=prod
+# **FIX LỖI QUAN TRỌNG**: Copy các class loader của Spring Boot
+# Đây chính là phần thiếu trong Dockerfile trước, gây ra lỗi ClassNotFoundException
+COPY --from=builder ${DEPENDENCY}/org /app/org
 
-# Port ứng dụng sẽ chạy
+# Mở cổng 8000. Cổng này khớp với `server.port=8000` trong file application.properties của bạn.
+# Render sẽ dùng cổng này để điều hướng traffic.
 EXPOSE 8000
 
-# Lệnh khởi chạy ứng dụng
+# Lệnh để khởi chạy ứng dụng Spring Boot đã được giải nén
+# Classpath bao gồm thư mục hiện tại (.), nơi chứa thư mục /org và code của bạn,
+# và tất cả các file jar trong thư mục /lib.
 ENTRYPOINT ["java", \
-            "-cp", "app:app/lib/*", \
+            "-cp", ".:lib/*", \
             "-XX:+UseContainerSupport", \
             "-XX:MaxRAMPercentage=75.0", \
-            "-XX:InitialRAMPercentage=50.0", \
-            "-XX:MinRAMPercentage=50.0", \
-            "api.exchange.ExchangeApplication"]
+            "org.springframework.boot.loader.launch.JarLauncher"]

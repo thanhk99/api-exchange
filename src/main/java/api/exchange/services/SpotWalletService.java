@@ -35,20 +35,23 @@ public class SpotWalletService {
             SpotWallet existingWallet = spotWalletRepository.findByUidAndCurrency(
                     entity.getUid(),
                     entity.getCurrency());
+
+            BigDecimal postBalance;
             if (existingWallet != null) {
                 existingWallet.setBalance(existingWallet.getBalance().add(entity.getBalance()));
-                spotWalletHistory.setBalance(existingWallet.getBalance());
+                postBalance = existingWallet.getBalance();
                 spotWalletRepository.save(existingWallet);
             } else {
                 entity.setUid(entity.getUid());
-                spotWalletHistory.setBalance(entity.getBalance());
+                postBalance = entity.getBalance();
                 spotWalletRepository.save(entity);
             }
             LocalDateTime createDt = LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh"));
             spotWalletHistory.setUserId(entity.getUid());
             spotWalletHistory.setAsset(entity.getCurrency());
             spotWalletHistory.setType("Nạp tiền");
-            spotWalletHistory.setBalance(entity.getBalance());
+            spotWalletHistory.setAmount(entity.getBalance());
+            spotWalletHistory.setBalance(postBalance);
             spotWalletHistory.setCreateDt(createDt);
             spotWalletHistoryRepository.save(spotWalletHistory);
             return ResponseEntity.ok(Map.of("message", "success"));
@@ -165,33 +168,33 @@ public class SpotWalletService {
                 break;
         }
 
-        // 2. Credit the Receivers (Always to Balance)
-        spotBuyerCoin.setBalance(spotBuyerCoin.getBalance().add(quantity));
-        spotSellerStable.setBalance(spotSellerStable.getBalance().add(totalCost));
+        // Cộng tiền cho người nhận (LUÔN cộng vào balance)
+        spotBuyerReceive.setBalance(spotBuyerReceive.getBalance().add(quantity));
+        spotSellerReceive.setBalance(spotSellerReceive.getBalance().add(totalCost));
 
-        // 3. Save All
-        spotWalletRepository.save(spotBuyerCoin);
-        spotWalletRepository.save(spotSellerCoin);
-        spotWalletRepository.save(spotBuyerStable);
-        spotWalletRepository.save(spotSellerStable);
+        // Ghi nhận biến động số dư
+        balanceFluctuation(buyerUid, coin, quantity, "Nhận coin từ giao dịch", spotBuyerReceive.getBalance());
+        balanceFluctuation(sellerUid, stableCoin, totalCost, "Nhận tiền từ giao dịch", spotSellerReceive.getBalance());
+        balanceFluctuation(buyerUid, stableCoin, totalCost.negate(), "Trừ tiền mua coin", spotBuyerSend.getBalance());
+        balanceFluctuation(sellerUid, coin, quantity.negate(), "Trừ coin bán", spotSellerSend.getBalance());
 
-        // 4. Log Fluctuations
-        balanceFluctuation(buyerUid, coin, quantity, "Nhận coin từ giao dịch");
-        balanceFluctuation(sellerUid, stableCoin, totalCost, "Nhận tiền từ giao dịch");
-        balanceFluctuation(buyerUid, stableCoin, totalCost.negate(), "Trừ tiền mua coin");
-        balanceFluctuation(sellerUid, coin, quantity.negate(), "Trừ coin bán");
+        // Lưu tất cả ví
+        spotWalletRepository.saveAll(Arrays.asList(
+                spotBuyerReceive, spotSellerSend, spotSellerReceive, spotBuyerSend));
 
         log.info("✅ Trade executed: {} {} @ {} - Buyer: {}, Seller: {}",
                 quantity, coin, price, buyerUid, sellerUid);
     }
 
     @Transactional
-    public void balanceFluctuation(String uid, String currency, BigDecimal amount, String type) {
+    public void balanceFluctuation(String uid, String currency, BigDecimal amount, String type,
+            BigDecimal postBalance) {
         SpotWalletHistory spotWalletHistory = new SpotWalletHistory();
         spotWalletHistory.setUserId(uid);
         spotWalletHistory.setAsset(currency);
         spotWalletHistory.setType(type);
-        spotWalletHistory.setBalance(amount);
+        spotWalletHistory.setAmount(amount);
+        spotWalletHistory.setBalance(postBalance);
         LocalDateTime createDt = LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh"));
         spotWalletHistory.setCreateDt(createDt);
         spotWalletHistoryRepository.save(spotWalletHistory);

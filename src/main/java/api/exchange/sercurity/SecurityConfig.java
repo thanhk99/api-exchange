@@ -2,6 +2,7 @@ package api.exchange.sercurity;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -29,9 +30,10 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthenticationFilter jwtFilter)
             throws Exception {
         http
-                .cors(cors -> cors.configurationSource(corsConfigurationSource())) // Sử dụng cấu hình CORS tùy chỉnh
-                .csrf(AbstractHttpConfigurer::disable) // Cách mới để disable CSRF
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(auth -> auth
+                        .dispatcherTypeMatchers(jakarta.servlet.DispatcherType.ASYNC).permitAll()
                         .requestMatchers(
                                 "/api/v1/auth/login",
                                 "/api/v1/auth/signup",
@@ -40,7 +42,12 @@ public class SecurityConfig {
                                 "api/v1/hisPriceCoin/**",
                                 "api/v1/spotKline/**",
                                 "api/v1/klineSpot/**",
+                                "/api/v1/coin/markets",
+                                "/api/v1/futuresKline/**",
+                                "/api/v1/futures/orders/orderbook/**",
                                 "/ws/**")
+                        .permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/futures/orders")
                         .permitAll()
                         .anyRequest().authenticated())
                 .sessionManagement(session -> session
@@ -53,7 +60,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOriginPatterns(List.of("*")); // Cho phép tất cả origin
+        configuration.setAllowedOriginPatterns(List.of("*"));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);

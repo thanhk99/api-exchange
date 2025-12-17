@@ -3,7 +3,8 @@ package api.exchange.controllers;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import api.exchange.models.UserDevice;
+import api.exchange.dtos.Request.RevokeDeviceRequest;
+
 import api.exchange.services.DeviceService;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,7 +13,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-
 
 @RestController
 @RequestMapping("api/v1/device")
@@ -27,9 +27,9 @@ public class DeviceController {
     }
 
     @PostMapping("revoke")
-    public ResponseEntity<?> revoked(@RequestBody UserDevice entity) {
-        return deviceService.revokeDevice(entity);
+    public ResponseEntity<?> revoked(@RequestBody RevokeDeviceRequest request,
+            @RequestHeader("Authorization") String authHeader) {
+        return deviceService.revokeDevice(request.getDeviceId(), authHeader);
     }
-    
 
 }

@@ -4,9 +4,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import api.exchange.dtos.Requset.LoginRequest;
-import api.exchange.dtos.Requset.RefreshTokenRequest;
-import api.exchange.dtos.Requset.SignupRequest;
+import api.exchange.dtos.Request.LoginRequest;
+import api.exchange.dtos.Request.RefreshTokenRequest;
+import api.exchange.dtos.Request.SignupRequest;
 import api.exchange.models.UserDevice;
 import api.exchange.services.AuthService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -46,4 +46,8 @@ public class AuthController {
         return authService.isExistEmail(signupRequest);
     }
 
+    @GetMapping("hello")
+    public String hello() {
+        return "Hello World";
+    }
 }

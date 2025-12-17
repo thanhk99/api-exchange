@@ -16,6 +16,5 @@ public interface FundingWalletRepository extends JpaRepository<FundingWallet, Lo
 
     List<FundingWallet> findAllByUid(String uid);
 
-    // FundingWallet findByUidAndCurrency(String uid, String currency);
-
+    List<FundingWallet> findAllByCurrency(String currency);
 }

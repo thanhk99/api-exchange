@@ -4,7 +4,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import api.exchange.dtos.Requset.PasswordRequest;
+import api.exchange.dtos.Request.PasswordRequest;
 import api.exchange.services.PasswordService;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;

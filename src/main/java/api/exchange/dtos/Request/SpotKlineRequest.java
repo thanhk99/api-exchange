@@ -1,4 +1,4 @@
-package api.exchange.dtos.Requset;
+package api.exchange.dtos.Request;
 
 import lombok.*;
 

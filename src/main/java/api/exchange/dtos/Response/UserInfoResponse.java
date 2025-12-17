@@ -1,5 +1,8 @@
 package api.exchange.dtos.Response;
 
+import api.exchange.models.User.KycStatus;
+import api.exchange.models.User.UserLevel;
+import api.exchange.models.User.UserStatus;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.Getter;
@@ -16,4 +19,8 @@ public class UserInfoResponse {
     private String email;
     private String username;
     private String nation;
+    private KycStatus kycStatus;
+    private String phone ;
+    private UserLevel userLevel;
+    private UserStatus userStatus;
 }

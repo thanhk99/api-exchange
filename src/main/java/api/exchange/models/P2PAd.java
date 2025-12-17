@@ -2,6 +2,8 @@ package api.exchange.models;
 
 import jakarta.persistence.*;
 import lombok.*;
+import java.util.List;
+import java.util.ArrayList;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -46,8 +48,13 @@ public class P2PAd {
     @Column(name = "available_amount", precision = 20, scale = 2, nullable = false)
     private BigDecimal availableAmount;
 
-    @Column(name = "payment_methods", nullable = false)
-    private String paymentMethods; // JSON: ["BankTransfer", "Momo"]
+    @ElementCollection
+    @CollectionTable(name = "p2p_ad_payment_methods", joinColumns = @JoinColumn(name = "ad_id"))
+    @Column(name = "payment_method", nullable = false)
+    private List<String> paymentMethods = new ArrayList<>();
+
+    @Column(name = "payment_method_id")
+    private Long paymentMethodId;
 
     @Column(name = "terms_conditions", columnDefinition = "text")
     private String termsConditions;

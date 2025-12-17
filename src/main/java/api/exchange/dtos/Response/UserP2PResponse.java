@@ -1,6 +1,7 @@
 package api.exchange.dtos.Response;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 import api.exchange.models.P2PAd.TradeType;
 import lombok.AllArgsConstructor;
@@ -21,7 +22,7 @@ public class UserP2PResponse {
     private BigDecimal availableAmount;
     private BigDecimal minAmount;
     private BigDecimal maxAmount;
-    private String paymentMethod;
+    private List<api.exchange.models.PaymentMethod> paymentMethods;
     private String asset;
     private String fiatCurrency;
     private TradeType tradeType;

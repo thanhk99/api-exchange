@@ -12,7 +12,6 @@ import api.exchange.models.FundingWallet;
 import api.exchange.services.FundingWalletService;
 import org.springframework.web.bind.annotation.GetMapping;
 
-
 @RestController
 @RequestMapping("api/v1/funding")
 public class FundingWalletController {
@@ -32,8 +31,7 @@ public class FundingWalletController {
     }
 
     @GetMapping("total")
-    public ResponseEntity<?> getTotalMoney( @RequestHeader("Authorization") String authHeader) {
+    public ResponseEntity<?> getTotalMoney(@RequestHeader("Authorization") String authHeader) {
         return fundingWalletService.getTotalMoney(authHeader);
     }
-    
 }

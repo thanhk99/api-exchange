@@ -15,4 +15,5 @@ public class CoinSpotResponse {
     private BigDecimal low24h;
     private BigDecimal volume;
     private Long timestamp;
+    private BigDecimal marketCap;
 }

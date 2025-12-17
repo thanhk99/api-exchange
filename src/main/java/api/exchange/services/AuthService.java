@@ -17,9 +17,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.server.ResponseStatusException;
 
-import api.exchange.dtos.Requset.LoginRequest;
-import api.exchange.dtos.Requset.RefreshTokenRequest;
-import api.exchange.dtos.Requset.SignupRequest;
+import api.exchange.dtos.Request.LoginRequest;
+import api.exchange.dtos.Request.RefreshTokenRequest;
+import api.exchange.dtos.Request.SignupRequest;
 import api.exchange.dtos.Response.AuthResponse;
 import api.exchange.models.User;
 import api.exchange.models.UserDevice;
@@ -83,7 +83,7 @@ public class AuthService {
             User user = new User();
             user.setUsername(signupRequest.getUsername());
             user.setEmail(signupRequest.getEmail());
-            user.setPassword(passwordEncoder.encode(signupRequest.getPassword()));  
+            user.setPassword(passwordEncoder.encode(signupRequest.getPassword()));
             user.setCreatedAt(LocalDateTime.now());
             user.setNation(signupRequest.getNation());
 
@@ -151,16 +151,29 @@ public class AuthService {
         }
     }
 
-    @Transactional
     public ResponseEntity<?> RefreshTokenService(RefreshTokenRequest refreshTokenRequest, HttpServletRequest request) {
         try {
             String requestRefreshToken = refreshTokenRequest.getRefreshToken();
+
+            if (requestRefreshToken == null && request.getCookies() != null) {
+                for (jakarta.servlet.http.Cookie cookie : request.getCookies()) {
+                    if ("refreshToken".equals(cookie.getName())) {
+                        requestRefreshToken = cookie.getValue();
+                        break;
+                    }
+                }
+            }
+
             if (requestRefreshToken == null) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                         .body(Map.of("error", "Invalid refresh token"));
             }
 
             refreshToken refreshToken = refreshTokenRepository.findByToken(requestRefreshToken);
+            if (refreshToken == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(Map.of("error", "Refresh token not found"));
+            }
             String deviceId = refreshToken.getDeviceId();
             if (refreshToken.getExpiresAt().isBefore(LocalDateTime.now())) {
                 refreshTokenRepository.delete(refreshToken);
@@ -170,6 +183,9 @@ public class AuthService {
 
             // Tạo token mới
             User user = refreshToken.getUser();
+            if (user == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "User not found"));
+            }
             String newAccessToken = jwtUtil.generateAccessToken(user);
             refreshToken newRefreshToken = jwtUtil.generateRefreshToken(user, deviceId);
 
@@ -182,10 +198,10 @@ public class AuthService {
                             user.getEmail(),
                             null));
 
-        } catch (ResponseStatusException e) {
-            throw e; // Re-throw các lỗi đã được định nghĩa
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "refresh token expried"));
+            // Catch ALL exceptions to prevent "Transaction silently rolled back"
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "Refresh token failed: " + e.getMessage()));
         }
     }
 
