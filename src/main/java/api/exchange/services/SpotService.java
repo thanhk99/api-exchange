@@ -13,9 +13,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
 import api.exchange.models.SpotWalletHistory;
+
 import api.exchange.models.OrderBooks;
 import api.exchange.models.OrderBooks.OrderStatus;
 import api.exchange.models.OrderBooks.OrderType;
+import api.exchange.models.OrderBooks.TradeType;
 import api.exchange.repository.SpotWalletHistoryRepository;
 import api.exchange.repository.OrderBooksRepository;
 import api.exchange.sercurity.jwt.JwtUtil;
@@ -41,14 +43,13 @@ public class SpotService {
     private SpotWalletService spotWalletService;
 
     @Autowired
-    private OrderBooksService orderBooksService;
-
-    @Autowired
     private SpotOrderWebsocket spotOrderWebsocket;
 
-    SpotService(SpotWalletHistoryRepository spotWalletHistoryRepository) {
-        this.spotWalletHistoryRepository = spotWalletHistoryRepository;
-    }
+    @Autowired
+    private org.springframework.amqp.rabbit.core.RabbitTemplate rabbitTemplate;
+
+    @Autowired
+    private api.exchange.repository.SpotWalletRepository spotWalletRepository;
 
     @Transactional
     public ResponseEntity<?> createOrder(OrderBooks entity, String header) {
@@ -75,34 +76,47 @@ public class SpotService {
 
         spotWalletService.lockBalanceLimit(entity, uid);
 
-        BigDecimal balance;
+        BigDecimal lockAmount;
         String asset = "";
         if (entity.getOrderType().equals(OrderType.BUY)) {
-            balance = entity.getPrice().multiply(entity.getQuantity());
+            lockAmount = entity.getPrice().multiply(entity.getQuantity());
             asset = entity.getSymbol().split("/")[1];
         } else {
-            balance = entity.getQuantity();
+            lockAmount = entity.getQuantity();
             asset = entity.getSymbol().split("/")[0];
         }
+
+        api.exchange.models.SpotWallet wallet = spotWalletRepository.findByUidAndCurrency(uid, asset);
+
         SpotWalletHistory spotWalletHistory = new SpotWalletHistory();
         spotWalletHistory.setUserId(uid);
         spotWalletHistory.setAsset(asset);
         spotWalletHistory.setType("Tạo lệnh");
-        spotWalletHistory.setBalance(balance);
+        spotWalletHistory.setAmount(lockAmount.negate());
+        spotWalletHistory.setBalance(wallet != null ? wallet.getBalance() : BigDecimal.ZERO);
         spotWalletHistory.setCreateDt(createAt);
         spotWalletHistoryRepository.save(spotWalletHistory);
 
         spotOrderWebsocket.broadcastOrderBooks(entity);
 
         OrderBooks orderSaved = orderBooksRepository.saveAndFlush(entity);
-        orderBooksService.matchOrders(orderSaved);
+
+        // Push to RabbitMQ for sequential processing
+        // Routing key can be dynamic based on symbol if we want multiple queues later
+        // For now using general key "spot.match.ALL" implied by config
+        rabbitTemplate.convertAndSend(api.exchange.config.RabbitMQConfig.EXCHANGE_NAME,
+                "spot.match.created",
+                orderSaved.getId());
+
+        // orderBooksService.matchOrders(orderSaved); // REMOVED: Direct call replaced
+        // by MQ
         // eventPublisher.publishEvent(new OrderMatchService.OrderCreatedEvent(entity));
 
         return ResponseEntity.ok(Map.of("message", "success", "data", "Tạo Order thành công "));
     }
 
     @Transactional
-    public ResponseEntity<?> cancleOrder(Long orderId) {
+    public ResponseEntity<?> cancelOrder(Long orderId) {
         Optional<OrderBooks> orderOpt = orderBooksRepository.findById(orderId);
         if (!orderOpt.isPresent()) {
             return ResponseEntity.badRequest().body(Map.of("message", "Bad Request", "data", "Không tìm thấy id"));
@@ -110,45 +124,16 @@ public class SpotService {
 
         OrderBooks order = orderOpt.get();
 
-        if (orderOpt.get().getStatus() == OrderStatus.ACTIVE || order.getStatus() == OrderStatus.PARTIALLY_FILLED) {
-            // For example: unlockBalance(order);
+        if (order.getStatus() == OrderStatus.ACTIVE || order.getStatus() == OrderStatus.PARTIALLY_FILLED) {
+            spotWalletService.unlockBalance(order, order.getUid());
+
             order.setStatus(OrderStatus.CANCELLED);
             order.setUpdatedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
             orderBooksRepository.save(order);
-        }
-        return ResponseEntity.badRequest().body(Map.of("message", "Bad Request", "data", "Không thể huỷ lệnh "));
-    }
 
-    // Methods moved to SpotWalletService
-
-    @Transactional
-    public void checkWalletRecive(OrderBooks entity, String uid) {
-        String[] parts = entity.getSymbol().split("/");
-        String coin = parts[0];
-        String stable = parts[1];
-        if (entity.getOrderType().equals(OrderType.BUY)) {
-            SpotWallet spotWallet = spotWalletRepository.findByUidAndCurrency(uid, coin);
-            if (spotWallet == null) {
-                SpotWallet newWallet = new SpotWallet();
-                newWallet.setUid(uid);
-                newWallet.setCurrency(coin);
-                newWallet.setBalance(BigDecimal.ZERO);
-                newWallet.setLockedBalance(BigDecimal.ZERO);
-                newWallet.setActive(true);
-                spotWalletRepository.save(newWallet);
-            }
-        } else {
-            SpotWallet spotWallet = spotWalletRepository.findByUidAndCurrency(uid, stable);
-            if (spotWallet == null) {
-                SpotWallet newWallet = new SpotWallet();
-                newWallet.setUid(uid);
-                newWallet.setCurrency(stable);
-                newWallet.setBalance(BigDecimal.ZERO);
-                newWallet.setLockedBalance(BigDecimal.ZERO);
-                newWallet.setActive(true);
-                spotWalletRepository.save(newWallet);
-            }
+            return ResponseEntity.ok(Map.of("message", "success", "data", "Đã huỷ lệnh và hoàn tiền"));
         }
+        return ResponseEntity.badRequest().body(Map.of("message", "Bad Request", "data", "Không thể huỷ lệnh"));
     }
 
     public Map<String, Object> getOrderBook(String symbol, int limit) {
@@ -174,7 +159,7 @@ public class SpotService {
 
         for (OrderBooks order : orders) {
             // Only aggregate LIMIT orders that are not fully filled
-            if (order.getTradeType() == TradeType.LIMIT) {
+            if (order.getTradeType().equals(TradeType.LIMIT)) {
                 priceMap.merge(order.getPrice(), order.getRemainingQuantity(), BigDecimal::add);
             }
         }

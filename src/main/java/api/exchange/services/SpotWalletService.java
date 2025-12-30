@@ -3,6 +3,7 @@ package api.exchange.services;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.Arrays;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,6 +32,10 @@ public class SpotWalletService {
     @Transactional
     public ResponseEntity<?> addBalanceCoin(SpotWallet entity) {
         try {
+            if (entity.getBalance() == null || entity.getBalance().compareTo(BigDecimal.ZERO) <= 0) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Balance must be greater than 0"));
+            }
+
             SpotWalletHistory spotWalletHistory = new SpotWalletHistory();
             SpotWallet existingWallet = spotWalletRepository.findByUidAndCurrency(
                     entity.getUid(),
@@ -85,41 +90,10 @@ public class SpotWalletService {
             throw new RuntimeException("Wallet not found for trade execution");
         }
 
-        // 1. Handle Buyer's Stable Coin (Payment)
-        // If Buyer was LIMIT/MARKET BUY -> They pay Stable Coin
-        // If Buyer used LIMIT, funds were locked. If MARKET, funds are in balance.
-
-        // Logic depends on who is the "Taker" vs "Maker" effectively, but here we have
-        // explicit TradeType
-        // Actually, the TradeType passed here seems to be from the perspective of the
-        // *match*, but we need to know
-        // specifically for buyer and seller if they were LIMIT or MARKET.
-        // However, the previous logic tried to infer this from TradeType enum like
-        // LIMIT_LIMIT, MARKET_LIMIT_BUY etc.
-        // Let's stick to the robust logic:
-        // We need to know if the Buyer's order was LIMIT or MARKET.
-        // And if the Seller's order was LIMIT or MARKET.
-        // The passed 'tradeType' seems to be a combination.
-
-        // Let's simplify and assume standard behavior based on the switch case provided
-        // in original code,
-        // but FIX the balance updates.
-
         switch (tradeType) {
             case LIMIT_LIMIT:
-                // Both Limit. Both have funds locked.
-                // Buyer: Locked Stable -> Seller Balance Stable
-                // Seller: Locked Coin -> Buyer Balance Coin
-
-                // Buyer pays Stable (Locked)
                 spotBuyerStable.setLockedBalance(spotBuyerStable.getLockedBalance().subtract(totalCost));
-                // Refund excess if any (only if buyer locked more than needed - e.g. market
-                // price lower than limit)
-                // In LIMIT_LIMIT, usually price is match price. If buyer limit > match price,
-                // excess is returned.
-                // The 'lockedPrice' argument seems to be the buyer's original limit price?
-                // Or is it just the price of the trade?
-                // Let's assume 'lockedPrice' is what was locked per unit.
+
                 BigDecimal buyerLockedAmount = lockedPrice.multiply(quantity);
                 if (buyerLockedAmount.compareTo(totalCost) > 0) {
                     spotBuyerStable.setLockedBalance(
@@ -169,18 +143,18 @@ public class SpotWalletService {
         }
 
         // Cộng tiền cho người nhận (LUÔN cộng vào balance)
-        spotBuyerReceive.setBalance(spotBuyerReceive.getBalance().add(quantity));
-        spotSellerReceive.setBalance(spotSellerReceive.getBalance().add(totalCost));
+        spotBuyerCoin.setBalance(spotBuyerCoin.getBalance().add(quantity));
+        spotSellerStable.setBalance(spotSellerStable.getBalance().add(totalCost));
 
         // Ghi nhận biến động số dư
-        balanceFluctuation(buyerUid, coin, quantity, "Nhận coin từ giao dịch", spotBuyerReceive.getBalance());
-        balanceFluctuation(sellerUid, stableCoin, totalCost, "Nhận tiền từ giao dịch", spotSellerReceive.getBalance());
-        balanceFluctuation(buyerUid, stableCoin, totalCost.negate(), "Trừ tiền mua coin", spotBuyerSend.getBalance());
-        balanceFluctuation(sellerUid, coin, quantity.negate(), "Trừ coin bán", spotSellerSend.getBalance());
+        balanceFluctuation(buyerUid, coin, quantity, "Nhận coin từ giao dịch", spotBuyerCoin.getBalance());
+        balanceFluctuation(sellerUid, stableCoin, totalCost, "Nhận tiền từ giao dịch", spotSellerStable.getBalance());
+        balanceFluctuation(buyerUid, stableCoin, totalCost.negate(), "Trừ tiền mua coin", spotBuyerStable.getBalance());
+        balanceFluctuation(sellerUid, coin, quantity.negate(), "Trừ coin bán", spotSellerCoin.getBalance());
 
         // Lưu tất cả ví
         spotWalletRepository.saveAll(Arrays.asList(
-                spotBuyerReceive, spotSellerSend, spotSellerReceive, spotBuyerSend));
+                spotBuyerCoin, spotSellerCoin, spotBuyerStable, spotSellerStable));
 
         log.info("✅ Trade executed: {} {} @ {} - Buyer: {}, Seller: {}",
                 quantity, coin, price, buyerUid, sellerUid);
@@ -200,35 +174,14 @@ public class SpotWalletService {
         spotWalletHistoryRepository.save(spotWalletHistory);
     }
 
-    // --- Methods moved from SpotService ---
-
     public Boolean checkBalance(OrderBooks entity, String uid) {
         String[] parts = entity.getSymbol().split("/");
         String coin = parts[0];
         String stable = parts[1];
 
-        // Use OrderBooksService or similar to get price if needed, but here we assume
-        // entity has price or we check approximate
-        // Note: Original code called
-        // orderBooksService.getLastTradedPrice(entity.getSymbol())
-        // We might need to pass that in or inject OrderBooksService.
-        // To avoid circular dependency, let's assume the caller ensures validity or we
-        // query price here.
-        // For now, let's replicate logic but be careful about dependencies.
-
-        // Actually, SpotService had OrderBooksService. SpotWalletService might not.
-        // Let's keep simple checks.
-
         if (entity.getTradeType().equals(api.exchange.models.OrderBooks.TradeType.MARKET)
                 && entity.getOrderType().equals(api.exchange.models.OrderBooks.OrderType.BUY)) {
-            // Market Buy: Need enough Stable Coin.
-            // Problem: We don't know exact price. Original code checked against
-            // LastTradedPrice.
-            // We will assume caller handles this or we inject a price provider.
-            // For this refactor, let's assume we check against 0 for now or rely on the
-            // fact that
-            // Market orders are risky without balance check.
-            // BUT, we can check if wallet exists.
+
             SpotWallet spotWallet = spotWalletRepository.findByUidAndCurrency(uid, stable);
             return spotWallet != null && spotWallet.getBalance().compareTo(BigDecimal.ZERO) > 0;
         } else {
@@ -263,6 +216,41 @@ public class SpotWalletService {
                 spotWallet.setLockedBalance(spotWallet.getLockedBalance().add(entity.getQuantity()));
                 spotWallet.setBalance(spotWallet.getBalance().subtract(entity.getQuantity()));
                 spotWalletRepository.save(spotWallet);
+            }
+        }
+    }
+
+    @Transactional
+    public void unlockBalance(OrderBooks entity, String uid) {
+        String[] parts = entity.getSymbol().split("/");
+        String coin = parts[0];
+        String stable = parts[1];
+
+        if (entity.getTradeType().equals(api.exchange.models.OrderBooks.TradeType.LIMIT)) {
+            if (entity.getOrderType().equals(api.exchange.models.OrderBooks.OrderType.BUY)) {
+                // Buyer locked Stable
+                SpotWallet spotWallet = spotWalletRepository.findByUidAndCurrencyWithLock(uid, stable);
+                if (spotWallet != null) {
+
+                    BigDecimal remainingQty = entity.getRemainingQuantity() != null ? entity.getRemainingQuantity()
+                            : entity.getQuantity();
+                    BigDecimal amountToUnlock = remainingQty.multiply(entity.getPrice());
+
+                    spotWallet.setLockedBalance(spotWallet.getLockedBalance().subtract(amountToUnlock));
+                    spotWallet.setBalance(spotWallet.getBalance().add(amountToUnlock));
+                    spotWalletRepository.save(spotWallet);
+                }
+            } else {
+                // Seller locked Coin
+                SpotWallet spotWallet = spotWalletRepository.findByUidAndCurrencyWithLock(uid, coin);
+                if (spotWallet != null) {
+                    BigDecimal remainingQty = entity.getRemainingQuantity() != null ? entity.getRemainingQuantity()
+                            : entity.getQuantity();
+
+                    spotWallet.setLockedBalance(spotWallet.getLockedBalance().subtract(remainingQty));
+                    spotWallet.setBalance(spotWallet.getBalance().add(remainingQty));
+                    spotWalletRepository.save(spotWallet);
+                }
             }
         }
     }

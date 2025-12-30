@@ -11,18 +11,36 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 public class RedisConfig {
 
     @Bean
+    public com.fasterxml.jackson.databind.ObjectMapper redisObjectMapper() {
+        com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        objectMapper.registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
+        objectMapper.disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        // Enable default typing for GenericJackson2JsonRedisSerializer equivalent
+        // behavior if needed,
+        // but GenericJackson2JsonRedisSerializer handles typing itself if passed no
+        // mapper?
+        // Actually, GenericJackson2JsonRedisSerializer(ObjectMapper) constructor
+        // exists.
+        // It's safer to just configure the serializer with the mapper.
+        return objectMapper;
+    }
+
+    @Bean
     public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory connectionFactory) {
         RedisTemplate<String, Object> template = new RedisTemplate<>();
         template.setConnectionFactory(connectionFactory);
 
-        // Sử dụng StringRedisSerializer cho key
         template.setKeySerializer(new StringRedisSerializer());
         template.setHashKeySerializer(new StringRedisSerializer());
 
-        // Sử dụng GenericJackson2JsonRedisSerializer cho value (để lưu object dưới dạng
-        // JSON)
-        template.setValueSerializer(new GenericJackson2JsonRedisSerializer());
-        template.setHashValueSerializer(new GenericJackson2JsonRedisSerializer());
+        com.fasterxml.jackson.databind.ObjectMapper mapper = redisObjectMapper();
+        // GenericJackson2JsonRedisSerializer deals with storing type info which is
+        // important for Redis.
+        // We can pass the mapper to it.
+        GenericJackson2JsonRedisSerializer serializer = new GenericJackson2JsonRedisSerializer(mapper);
+
+        template.setValueSerializer(serializer);
+        template.setHashValueSerializer(serializer);
 
         template.afterPropertiesSet();
         return template;
@@ -35,8 +53,12 @@ public class RedisConfig {
         template.setConnectionFactory(connectionFactory);
         template.setKeySerializer(new StringRedisSerializer());
         template.setHashKeySerializer(new StringRedisSerializer());
-        template.setValueSerializer(new GenericJackson2JsonRedisSerializer());
-        template.setHashValueSerializer(new GenericJackson2JsonRedisSerializer());
+
+        com.fasterxml.jackson.databind.ObjectMapper mapper = redisObjectMapper();
+        GenericJackson2JsonRedisSerializer serializer = new GenericJackson2JsonRedisSerializer(mapper);
+
+        template.setValueSerializer(serializer);
+        template.setHashValueSerializer(serializer);
         template.afterPropertiesSet();
         return template;
     }

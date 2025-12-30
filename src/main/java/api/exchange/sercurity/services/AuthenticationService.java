@@ -38,12 +38,12 @@ public class AuthenticationService {
 
         User user = userRepository.findByEmail(email);
         if (user == null) {
-            throw new RuntimeException("User not found for email: " + email);
+            throw new RuntimeException("User not found");
         }
 
         return user.getUid();
     }
-    
+
     /**
      * Retrieves the currently authenticated User entity.
      */
@@ -59,7 +59,7 @@ public class AuthenticationService {
         if (principal instanceof UserDetails) {
             email = ((UserDetails) principal).getUsername();
         } else {
-             email = principal.toString();
+            email = principal.toString();
         }
 
         User user = userRepository.findByEmail(email);

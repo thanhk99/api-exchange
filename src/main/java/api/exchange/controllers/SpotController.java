@@ -29,9 +29,9 @@ public class SpotController {
         return spotService.createOrder(entity, header);
     }
 
-    @PostMapping("/cancle")
-    public ResponseEntity<?> cancleOrder(@RequestBody OrderBooks entity) {
-        return spotService.cancleOrder(entity.getId());
+    @PostMapping("/cancel")
+    public ResponseEntity<?> cancelOrder(@RequestBody OrderBooks entity) {
+        return spotService.cancelOrder(entity.getId());
     }
 
     @GetMapping("/orderbook/{symbol}")

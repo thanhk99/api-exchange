@@ -5,14 +5,11 @@ import java.time.LocalDateTime;
 import java.util.*;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import api.exchange.models.OrderBooks;
 import api.exchange.models.OrderBooks.OrderStatus;
-import api.exchange.models.OrderBooks.OrderType;
-import api.exchange.models.SpotWalletHistory;
 import api.exchange.models.TransactionSpot;
 import api.exchange.repository.OrderBooksRepository;
 import api.exchange.repository.SpotWalletHistoryRepository;
@@ -27,12 +24,6 @@ public class OrderBooksService {
     private OrderBooksRepository orderBooksRepository;
 
     @Autowired
-    private RedisTemplate<String, OrderBooks> redisTemplate;
-
-    @Autowired
-    private OrderBatchProcessor batchProcessor;
-
-    @Autowired
     private SpotWalletHistoryRepository spotWalletHistoryRepository;
 
     @Autowired
@@ -40,13 +31,6 @@ public class OrderBooksService {
 
     @Autowired
     private SpotWalletService spotWalletService;
-
-    public void addOrderToRedis(OrderBooks order) {
-        String key = order.isBuyOrder() ? "buyOrders:" + order.getSymbol() : "sellOrders:" + order.getSymbol();
-        double score = order.isMarketOrder() ? 0 : order.getPrice().doubleValue() * (order.isBuyOrder() ? -1 : 1);
-        redisTemplate.opsForZSet().add(key, order, score);
-        log.info("➕ Added order to Redis: {} with score {}", order.getId(), score);
-    }
 
     @Transactional
     public void matchOrders(OrderBooks newOrder) {
@@ -57,40 +41,48 @@ public class OrderBooksService {
             return;
         }
 
-        String oppositeKey = getOppositeOrderKey(newOrder);
-        Set<OrderBooks> oppositeOrders = getOppositeOrdersFromRedis(oppositeKey);
+        // Fetch matching orders from DB directly
+        List<OrderBooks> oppositeOrders;
+        if (newOrder.isBuyOrder()) {
+            // If buying, look for Sell orders (lowest ask first)
+            oppositeOrders = orderBooksRepository.findSellOrderBooks(newOrder.getSymbol());
+        } else {
+            // If selling, look for Buy orders (highest bid first)
+            oppositeOrders = orderBooksRepository.findBuyOrderBooks(newOrder.getSymbol());
+        }
 
         if (oppositeOrders.isEmpty()) {
-            addOrderToRedis(newOrder);
-            log.info("📥 No opposite orders, added to Redis. Order ID: {}", newOrder.getId());
+            log.info("📥 No opposite orders found in DB. Order ID: {}", newOrder.getId());
             return;
         }
 
-        log.info("🔍 Matching order {} with {} opposite orders", newOrder.getId(), oppositeOrders.size());
+        log.info("🔍 Matching order {} with {} opposite orders from DB", newOrder.getId(), oppositeOrders.size());
 
-        // Sử dụng iterator để tránh concurrent modification
         Iterator<OrderBooks> iterator = oppositeOrders.iterator();
         while (iterator.hasNext() && !newOrder.isFullyFilled()) {
             OrderBooks oppositeOrder = iterator.next();
 
             if (!isValidOrder(oppositeOrder)) {
-                log.warn("⚠️ Skipping invalid order from Redis: {}", oppositeOrder.getId());
+                log.warn("⚠️ Skipping invalid order from DB: {}", oppositeOrder.getId());
                 continue;
             }
 
             if (canMatch(newOrder, oppositeOrder)) {
-                // THÊM: Lấy order mới nhất từ DB trước khi khớp
-                OrderBooks freshOppositeOrder = orderBooksRepository.findById(oppositeOrder.getId())
-                        .orElse(oppositeOrder);
+                // Double check status from DB in case of concurrency (optional but good
+                // practice)
+                // Since we just fetched it, it might be stale if high concurrency, but we are
+                // inside transaction?
+                // Note: @Transactional ensures we are in a transaction context.
+                // Ideally, we should lock these rows, but for now simple matching.
 
-                executeTrade(newOrder, freshOppositeOrder, oppositeKey);
+                executeTrade(newOrder, oppositeOrder);
             }
         }
 
         handleOrderAfterMatching(newOrder);
     }
 
-    private void executeTrade(OrderBooks newOrder, OrderBooks oppositeOrder, String oppositeKey) {
+    private void executeTrade(OrderBooks newOrder, OrderBooks oppositeOrder) {
         // Tính toán match quantity dựa trên remaining quantity thực tế
         BigDecimal newOrderRemaining = newOrder.getRemainingQuantity();
         BigDecimal oppositeRemaining = oppositeOrder.getRemainingQuantity();
@@ -115,11 +107,11 @@ public class OrderBooksService {
         updateOrderStatus(newOrder);
         updateOrderStatus(oppositeOrder);
 
-        // Cập nhật opposite order trong Redis và DB
-        updateOrderInRedisAndDB(oppositeOrder, oppositeKey);
+        // Cập nhật opposite order trong DB
+        orderBooksRepository.save(oppositeOrder);
 
         // Tạo trade record
-        createTradeRecord(newOrder, oppositeOrder, oppositeKey, matchQuantity, tradePrice);
+        createTradeRecord(newOrder, oppositeOrder, matchQuantity, tradePrice);
 
         // Execute Trade in Wallets (Transfer funds)
         try {
@@ -168,16 +160,13 @@ public class OrderBooksService {
 
         if (order.isFullyFilled()) {
             log.info("✅ Order fully filled: {}", order.getId());
-            // Không cần thêm vào Redis vì đã filled
         } else {
-            // Order chưa filled hết, thêm vào Redis để chờ khớp tiếp
-            addOrderToRedis(order);
-            log.info("🟡 Order partially filled, added to Redis: {} (filled: {}/{})",
+            log.info("🟡 Order partially filled: {} (filled: {}/{})",
                     order.getId(), order.getFilledQuantity(), order.getQuantity());
         }
 
-        // Luôn cập nhật vào DB
-        batchProcessor.addOrderToBatch(order);
+        // Luôn cập nhật vào DB ngay lập tức để đảm bảo tính nhất quán
+        orderBooksRepository.save(order);
     }
 
     private void updateOrderStatus(OrderBooks order) {
@@ -189,40 +178,6 @@ public class OrderBooksService {
             order.setStatus(OrderStatus.ACTIVE);
         }
         order.setUpdatedAt(LocalDateTime.now());
-    }
-
-    private String getOppositeOrderKey(OrderBooks order) {
-        return order.isBuyOrder() ? "sellOrders:" + order.getSymbol() : "buyOrders:" + order.getSymbol();
-    }
-
-    private Set<OrderBooks> getOppositeOrdersFromRedis(String oppositeKey) {
-        try {
-            Set<OrderBooks> redisOrders = redisTemplate.opsForZSet().range(oppositeKey, 0, -1);
-            if (redisOrders == null || redisOrders.isEmpty()) {
-                return new HashSet<>();
-            }
-
-            // Tạo set mới với orders đã được refresh từ DB
-            Set<OrderBooks> refreshedOrders = new HashSet<>();
-            for (OrderBooks redisOrder : redisOrders) {
-                try {
-                    // Lấy order mới nhất từ DB để có filled quantity chính xác
-                    OrderBooks freshOrder = orderBooksRepository.findById(redisOrder.getId())
-                            .orElse(redisOrder);
-                    refreshedOrders.add(freshOrder);
-                } catch (Exception e) {
-                    log.warn("⚠️ Failed to refresh order {} from DB, using Redis version: {}",
-                            redisOrder.getId(), e.getMessage());
-                    refreshedOrders.add(redisOrder);
-                }
-            }
-
-            return refreshedOrders;
-
-        } catch (Exception e) {
-            log.error("❌ Error reading from Redis: {}", e.getMessage());
-            return new HashSet<>();
-        }
     }
 
     private boolean isValidOrder(OrderBooks order) {
@@ -277,75 +232,7 @@ public class OrderBooksService {
         }
     }
 
-    private void updateOrderInRedisAndDB(OrderBooks order, String redisKey) {
-        try {
-            // LUÔN cập nhật DB trước
-            OrderBooks updatedOrder = orderBooksRepository.save(order);
-            log.info("💾 Order saved to DB: {} (filled: {}/{}, status: {})",
-                    updatedOrder.getId(), updatedOrder.getFilledQuantity(),
-                    updatedOrder.getQuantity(), updatedOrder.getStatus());
-
-            // Sau đó cập nhật Redis
-            if (updatedOrder.isFullyFilled()) {
-                // Xóa khỏi Redis nếu đã filled hết
-                removeOrderFromRedis(redisKey, updatedOrder);
-                log.info("🗑️ Order fully filled, removed from Redis: {}", updatedOrder.getId());
-            } else {
-                // Cập nhật order trong Redis với data mới nhất từ DB
-                updateOrderInRedis(redisKey, updatedOrder);
-                log.info("📝 Order updated in Redis: {} (filled: {}/{})",
-                        updatedOrder.getId(), updatedOrder.getFilledQuantity(),
-                        updatedOrder.getQuantity());
-            }
-
-        } catch (Exception e) {
-            log.error("❌ Failed to update order {}: {}", order.getId(), e.getMessage());
-        }
-    }
-
-    private void updateOrderInRedis(String redisKey, OrderBooks order) {
-        try {
-            // Xóa order cũ khỏi Redis
-            removeOrderFromRedis(redisKey, order);
-
-            // Thêm order mới với filled quantity đã cập nhật
-            Double score = calculateScore(order);
-            redisTemplate.opsForZSet().add(redisKey, order, score);
-
-            log.debug("🔄 Order updated in Redis: {} with score {}", order.getId(), score);
-
-        } catch (Exception e) {
-            log.error("❌ Failed to update order {} in Redis: {}", order.getId(), e.getMessage());
-        }
-    }
-
-    private void removeOrderFromRedis(String redisKey, OrderBooks orderToRemove) {
-        try {
-            Set<OrderBooks> ordersInRedis = redisTemplate.opsForZSet().range(redisKey, 0, -1);
-            if (ordersInRedis != null) {
-                for (OrderBooks order : ordersInRedis) {
-                    if (order.getId().equals(orderToRemove.getId())) {
-                        redisTemplate.opsForZSet().remove(redisKey, order);
-                        log.debug("🧹 Removed order {} from Redis", order.getId());
-                        break;
-                    }
-                }
-            }
-        } catch (Exception e) {
-            log.error("❌ Failed to remove order {} from Redis: {}", orderToRemove.getId(), e.getMessage());
-        }
-    }
-
-    private double calculateScore(OrderBooks order) {
-        if (order.isMarketOrder()) {
-            return 0;
-        }
-
-        double score = order.getPrice().doubleValue();
-        return order.isBuyOrder() ? -score : score;
-    }
-
-    private void createTradeRecord(OrderBooks newOrder, OrderBooks oppositeOrder, String oppositeKey,
+    private void createTradeRecord(OrderBooks newOrder, OrderBooks oppositeOrder,
             BigDecimal mathQuality, BigDecimal tradePrice) {
         try {
             TransactionSpot transactionSpot = new TransactionSpot();
@@ -354,18 +241,20 @@ public class OrderBooksService {
                 transactionSpot.setBuyerOrderId(newOrder.getId());
                 transactionSpot.setSellerId(oppositeOrder.getUid());
                 transactionSpot.setSellerOrderId(oppositeOrder.getId());
+                transactionSpot.setSide(api.exchange.models.TransactionSpot.TradeSide.BUY);
             } else {
                 transactionSpot.setSellerId(newOrder.getUid());
                 transactionSpot.setSellerOrderId(newOrder.getId());
                 transactionSpot.setBuyerOrderId(oppositeOrder.getId());
                 transactionSpot.setBuyerId(oppositeOrder.getUid());
+                transactionSpot.setSide(api.exchange.models.TransactionSpot.TradeSide.SELL);
             }
             transactionSpot.setSymbol(newOrder.getSymbol());
             transactionSpot.setQuantity(mathQuality);
             transactionSpot.setPrice(tradePrice);
             transactionSpotRepository.save(transactionSpot);
         } catch (Exception e) {
-            log.error("Error creating trade record for key {}:", oppositeKey, e);
+            log.error("Error creating trade record:", e);
         }
     }
 

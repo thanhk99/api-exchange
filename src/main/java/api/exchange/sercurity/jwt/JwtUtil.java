@@ -85,20 +85,29 @@ public class JwtUtil {
 
     // Tạo refresh token và lưu vào database
     public refreshToken generateRefreshToken(User user, String deviceId) {
-        // Xóa token cũ nếu tồn tại
-        refreshTokenRepository.findByUser(user)
-                .ifPresent(refreshTokenRepository::delete);
         LocalDateTime timeNow = LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh"));
-        // Tạo token mới
-        refreshToken newToken = refreshToken.builder()
-                .user(user)
-                .token(UUID.randomUUID().toString())
-                .deviceId(deviceId)
-                .lastUsedAt(timeNow)
-                .expiresAt(timeNow.plusDays(refreshTokenExpirationDay))
-                .build();
 
-        return refreshTokenRepository.save(newToken);
+        java.util.Optional<refreshToken> existingTokenWrapper = refreshTokenRepository.findByUser(user);
+
+        refreshToken tokenToSave;
+
+        if (existingTokenWrapper.isPresent()) {
+            tokenToSave = existingTokenWrapper.get();
+            tokenToSave.setToken(UUID.randomUUID().toString());
+            tokenToSave.setDeviceId(deviceId);
+            tokenToSave.setLastUsedAt(timeNow);
+            tokenToSave.setExpiresAt(timeNow.plusDays(refreshTokenExpirationDay));
+        } else {
+            tokenToSave = refreshToken.builder()
+                    .user(user)
+                    .token(UUID.randomUUID().toString())
+                    .deviceId(deviceId)
+                    .lastUsedAt(timeNow)
+                    .expiresAt(timeNow.plusDays(refreshTokenExpirationDay))
+                    .build();
+        }
+
+        return refreshTokenRepository.save(tokenToSave);
     }
 
     // Xác thực token
