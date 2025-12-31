@@ -1,6 +1,5 @@
 package api.exchange.controllers;
 
-import api.exchange.dtos.Request.FuturesKlineRequest;
 import api.exchange.dtos.Response.KlinesFuturesResponse;
 import api.exchange.services.FuturesKlineCalculationService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,7 +11,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/v1/futuresKline")
+@RequestMapping("/api/v1/futures/kline")
 @CrossOrigin(origins = "*")
 public class FuturesKlineController {
 
@@ -20,20 +19,21 @@ public class FuturesKlineController {
     private FuturesKlineCalculationService futuresKlineCalculationService;
 
     /**
-     * Lấy dữ liệu kline của một symbol với khoảng thời gian cụ thể
+     * Lấy dữ liệu kline (RESTful GET)
      */
-    @PostMapping("/symbol")
-    public ResponseEntity<Map<String, Object>> getKlineData(@RequestBody FuturesKlineRequest request,
+    @GetMapping
+    public ResponseEntity<Map<String, Object>> getKlineData(
+            @RequestParam String symbol,
+            @RequestParam String interval,
             @RequestParam(defaultValue = "72") int limit,
             @RequestParam(required = false) Long endTime) {
 
         try {
-            List<KlinesFuturesResponse> klineData = getKlineDataByInterval(request.getSymbol(), request.getInterval(),
-                    limit, endTime);
+            List<KlinesFuturesResponse> klineData = getKlineDataByInterval(symbol, interval, limit, endTime);
 
             Map<String, Object> response = new HashMap<>();
-            response.put("symbol", request.getSymbol().toUpperCase());
-            response.put("interval", request.getInterval());
+            response.put("symbol", symbol.toUpperCase());
+            response.put("interval", interval);
             response.put("data", klineData);
             response.put("count", klineData.size());
             response.put("limit", limit);
@@ -45,8 +45,8 @@ public class FuturesKlineController {
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("success", false);
             errorResponse.put("message", "Lỗi khi lấy dữ liệu futures kline: " + e.getMessage());
-            errorResponse.put("symbol", request.getSymbol().toUpperCase());
-            errorResponse.put("interval", request.getInterval());
+            errorResponse.put("symbol", symbol.toUpperCase());
+            errorResponse.put("interval", interval);
             errorResponse.put("data", null);
 
             return ResponseEntity.badRequest().body(errorResponse);

@@ -40,12 +40,14 @@ public class SecurityConfig {
                                 "/api/v1/auth/refresh",
                                 "/api/v1/auth/existEmail",
                                 "/api/v1/hisPriceCoin/**",
-                                "/api/v1/spotKline/**",
+                                "/api/v1/spot/kline/**",
+                                "/api/v1/spot/orderbook/**",
+                                "/api/v1/spot/trades/history/**",
                                 "/api/v1/klineSpot/**",
                                 "/api/v1/kline1s/**",
                                 "/api/v1/coin/**",
-                                "/api/v1/public/futures/**",
-                                "/api/v1/futuresKline/**",
+                                "/api/v1/futures/coins",
+                                "/api/v1/futures/kline/**",
                                 "/api/v1/futures/orders/orderbook/**",
                                 "/ws/**")
                         .permitAll()

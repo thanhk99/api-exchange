@@ -11,13 +11,35 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class RabbitMQConfig {
 
-    public static final String QUEUE_NAME = "spot.matching.queue";
+    public static final String QUEUE_NAME = "spot.matching.v1.queue";
     public static final String EXCHANGE_NAME = "spot.exchange";
     public static final String ROUTING_KEY = "spot.match.#";
 
+    public static final String DLQ_NAME = "spot.matching.dlq";
+    public static final String DLX_NAME = "spot.exchange.dlx";
+    public static final String DL_ROUTING_KEY = "spot.match.dead";
+
     @Bean
     public Queue queue() {
-        return new Queue(QUEUE_NAME, true);
+        return QueueBuilder.durable(QUEUE_NAME)
+                .withArgument("x-dead-letter-exchange", DLX_NAME)
+                .withArgument("x-dead-letter-routing-key", DL_ROUTING_KEY)
+                .build();
+    }
+
+    @Bean
+    public Queue deadLetterQueue() {
+        return new Queue(DLQ_NAME, true);
+    }
+
+    @Bean
+    public TopicExchange deadLetterExchange() {
+        return new TopicExchange(DLX_NAME);
+    }
+
+    @Bean
+    public Binding dlqBinding(Queue deadLetterQueue, TopicExchange deadLetterExchange) {
+        return BindingBuilder.bind(deadLetterQueue).to(deadLetterExchange).with(DL_ROUTING_KEY);
     }
 
     @Bean

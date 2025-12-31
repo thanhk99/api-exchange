@@ -30,6 +30,12 @@ public class FuturesCoinData {
     private BigDecimal volume24h; // Khối lượng 24h
 
     @Column(precision = 24, scale = 8)
+    private BigDecimal highPrice24h; // Giá cao nhất 24h
+
+    @Column(precision = 24, scale = 8)
+    private BigDecimal lowPrice24h; // Giá thấp nhất 24h
+
+    @Column(precision = 24, scale = 8)
     private BigDecimal fundingRate; // Funding Rate hiện tại
 
     private LocalDateTime nextFundingTime; // Thời gian Funding tiếp theo

@@ -164,7 +164,7 @@ public class FuturesMarketWebSocket extends WebSocketClient {
 
                     v.setSymbol(symbol);
                     v.setLastPrice(new BigDecimal(node.path("c").asText("0")));
-                    v.setPriceChange24h(new BigDecimal(node.path("p").asText("0")));
+                    v.setPriceChange24h(new BigDecimal(node.path("P").asText("0")));
                     v.setPriceChangePercent(new BigDecimal(node.path("P").asText("0")));
                     v.setHighPrice24h(new BigDecimal(node.path("h").asText("0")));
                     v.setLowPrice24h(new BigDecimal(node.path("l").asText("0")));

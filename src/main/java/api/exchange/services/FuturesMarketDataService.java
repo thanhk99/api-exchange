@@ -113,6 +113,8 @@ public class FuturesMarketDataService {
                 coinData.setLastPrice(new BigDecimal(tickerData.get("lastPrice").asText()));
                 coinData.setPriceChange24h(new BigDecimal(tickerData.get("priceChangePercent").asText()));
                 coinData.setVolume24h(new BigDecimal(tickerData.get("volume").asText()));
+                coinData.setHighPrice24h(new BigDecimal(tickerData.get("highPrice").asText()));
+                coinData.setLowPrice24h(new BigDecimal(tickerData.get("lowPrice").asText()));
 
                 // Logo
                 String coinId = symbol.replace("USDT", "");

@@ -242,12 +242,14 @@ public class OrderBooksService {
                 transactionSpot.setSellerId(oppositeOrder.getUid());
                 transactionSpot.setSellerOrderId(oppositeOrder.getId());
                 transactionSpot.setSide(api.exchange.models.TransactionSpot.TradeSide.BUY);
+                transactionSpot.setIsMaker(false); // Buyer là Taker
             } else {
                 transactionSpot.setSellerId(newOrder.getUid());
                 transactionSpot.setSellerOrderId(newOrder.getId());
                 transactionSpot.setBuyerOrderId(oppositeOrder.getId());
                 transactionSpot.setBuyerId(oppositeOrder.getUid());
                 transactionSpot.setSide(api.exchange.models.TransactionSpot.TradeSide.SELL);
+                transactionSpot.setIsMaker(true); // Buyer (lệnh chờ) là Maker
             }
             transactionSpot.setSymbol(newOrder.getSymbol());
             transactionSpot.setQuantity(mathQuality);

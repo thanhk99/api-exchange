@@ -8,4 +8,10 @@ import java.util.List;
 @Repository
 public interface FuturesTransactionRepository extends JpaRepository<FuturesTransaction, Long> {
     List<FuturesTransaction> findByUid(String uid);
+
+    // Query methods cho trade history
+    List<FuturesTransaction> findByUid(String uid, org.springframework.data.domain.Pageable pageable);
+
+    List<FuturesTransaction> findByUidAndType(String uid, FuturesTransaction.TransactionType type,
+            org.springframework.data.domain.Pageable pageable);
 }

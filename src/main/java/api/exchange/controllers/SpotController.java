@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import api.exchange.models.OrderBooks;
 import api.exchange.services.SpotService;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -23,17 +24,26 @@ public class SpotController {
     @Autowired
     private SpotService spotService;
 
-    @PostMapping("/create")
+    /**
+     * Tạo lệnh mới (RESTful)
+     */
+    @PostMapping("/orders")
     public ResponseEntity<?> createOrder(@RequestBody OrderBooks entity,
             @RequestHeader("Authorization") String header) {
         return spotService.createOrder(entity, header);
     }
 
-    @PostMapping("/cancel")
-    public ResponseEntity<?> cancelOrder(@RequestBody OrderBooks entity) {
-        return spotService.cancelOrder(entity.getId());
+    /**
+     * Hủy lệnh (RESTful)
+     */
+    @DeleteMapping("/orders/{orderId}")
+    public ResponseEntity<?> cancelOrder(@PathVariable Long orderId) {
+        return spotService.cancelOrder(orderId);
     }
 
+    /**
+     * Lấy sổ lệnh (Orderbook)
+     */
     @GetMapping("/orderbook/{symbol}")
     public ResponseEntity<?> getOrderBook(
             @PathVariable String symbol,
@@ -41,6 +51,26 @@ public class SpotController {
         try {
             var orderBook = spotService.getOrderBook(symbol, limit);
             return ResponseEntity.ok(orderBook);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    /**
+     * Lấy lịch sử lệnh của user (cần authentication)
+     */
+    @GetMapping("/orders")
+    public ResponseEntity<?> getOrders(
+            @RequestHeader("Authorization") String header,
+            @RequestParam(required = false) String symbol,
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "50") int limit,
+            @RequestParam(defaultValue = "0") int offset) {
+        try {
+            var orders = spotService.getUserOrders(header, symbol, status, limit, offset);
+            return ResponseEntity.ok(Map.of(
+                    "message", "success",
+                    "data", orders));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }

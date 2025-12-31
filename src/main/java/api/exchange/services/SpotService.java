@@ -101,16 +101,16 @@ public class SpotService {
 
         OrderBooks orderSaved = orderBooksRepository.saveAndFlush(entity);
 
-        // Push to RabbitMQ for sequential processing
-        // Routing key can be dynamic based on symbol if we want multiple queues later
-        // For now using general key "spot.match.ALL" implied by config
-        rabbitTemplate.convertAndSend(api.exchange.config.RabbitMQConfig.EXCHANGE_NAME,
-                "spot.match.created",
-                orderSaved.getId());
-
-        // orderBooksService.matchOrders(orderSaved); // REMOVED: Direct call replaced
-        // by MQ
-        // eventPublisher.publishEvent(new OrderMatchService.OrderCreatedEvent(entity));
+        // Push to RabbitMQ for sequential processing after transaction commit
+        org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                new org.springframework.transaction.support.TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        rabbitTemplate.convertAndSend(api.exchange.config.RabbitMQConfig.EXCHANGE_NAME,
+                                "spot.match.created",
+                                orderSaved.getId());
+                    }
+                });
 
         return ResponseEntity.ok(Map.of("message", "success", "data", "Tạo Order thành công "));
     }
@@ -170,5 +170,30 @@ public class SpotService {
                         e.getKey().toPlainString(),
                         e.getValue().toPlainString()))
                 .collect(java.util.stream.Collectors.toList());
+    }
+
+    /**
+     * Lấy lịch sử lệnh của user (với filter)
+     */
+    public List<OrderBooks> getUserOrders(String header, String symbol, String status, int limit, int offset) {
+        String jwt = header.substring(7);
+        String uid = jwtUtil.getUserIdFromToken(jwt);
+
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(
+                offset / limit,
+                limit,
+                org.springframework.data.domain.Sort.by("createdAt").descending());
+
+        if (symbol != null && !symbol.isEmpty() && status != null && !status.isEmpty()) {
+            OrderStatus orderStatus = OrderStatus.valueOf(status.toUpperCase());
+            return orderBooksRepository.findByUidAndSymbolAndStatus(uid, symbol, orderStatus, pageable);
+        } else if (symbol != null && !symbol.isEmpty()) {
+            return orderBooksRepository.findByUidAndSymbol(uid, symbol, pageable);
+        } else if (status != null && !status.isEmpty()) {
+            OrderStatus orderStatus = OrderStatus.valueOf(status.toUpperCase());
+            return orderBooksRepository.findByUidAndStatus(uid, orderStatus, pageable);
+        } else {
+            return orderBooksRepository.findByUid(uid, pageable);
+        }
     }
 }

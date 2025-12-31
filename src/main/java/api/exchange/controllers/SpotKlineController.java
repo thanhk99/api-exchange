@@ -1,6 +1,5 @@
 package api.exchange.controllers;
 
-import api.exchange.dtos.Request.SpotKlineRequest;
 import api.exchange.dtos.Response.KlinesSpotResponse;
 import api.exchange.services.KlineCalculationService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,26 +11,28 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/v1/spotKline")
+@RequestMapping("/api/v1/spot/kline")
 @CrossOrigin(origins = "*")
 public class SpotKlineController {
 
     @Autowired
     private KlineCalculationService klineCalculationService;
 
-    // Lấy dữ liệu kline của một symbol với khoảng thời gian cụ thể
-
-    @PostMapping("/symbol")
-    public ResponseEntity<Map<String, Object>> getKlineData(@RequestBody SpotKlineRequest request,
+    /**
+     * Lấy dữ liệu kline (RESTful GET)
+     */
+    @GetMapping
+    public ResponseEntity<Map<String, Object>> getKlineData(
+            @RequestParam String symbol,
+            @RequestParam String interval,
             @RequestParam(defaultValue = "72") int limit) {
 
         try {
-            List<KlinesSpotResponse> klineData = getKlineDataByInterval(request.getSymbol(), request.getInterval(),
-                    limit);
+            List<KlinesSpotResponse> klineData = getKlineDataByInterval(symbol, interval, limit);
 
             Map<String, Object> response = new HashMap<>();
-            response.put("symbol", request.getSymbol().toUpperCase());
-            response.put("interval", request.getInterval());
+            response.put("symbol", symbol.toUpperCase());
+            response.put("interval", interval);
             response.put("data", klineData);
             response.put("count", klineData.size());
             response.put("limit", limit);
@@ -43,8 +44,8 @@ public class SpotKlineController {
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("success", false);
             errorResponse.put("message", "Lỗi khi lấy dữ liệu kline: " + e.getMessage());
-            errorResponse.put("symbol", request.getSymbol().toUpperCase());
-            errorResponse.put("interval", request.getInterval());
+            errorResponse.put("symbol", symbol.toUpperCase());
+            errorResponse.put("interval", interval);
             errorResponse.put("data", null);
 
             return ResponseEntity.badRequest().body(errorResponse);
