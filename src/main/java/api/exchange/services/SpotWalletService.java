@@ -90,6 +90,31 @@ public class SpotWalletService {
             throw new RuntimeException("Wallet not found for trade execution");
         }
 
+        SpotWallet spotBuyerReceive = spotBuyerCoin;
+        SpotWallet spotBuyerSend = spotBuyerStable;
+        SpotWallet spotSellerReceive = spotSellerStable;
+        SpotWallet spotSellerSend = spotSellerCoin;
+
+        // 1. Handle Buyer's Stable Coin (Payment)
+        // If Buyer was LIMIT/MARKET BUY -> They pay Stable Coin
+        // If Buyer used LIMIT, funds were locked. If MARKET, funds are in balance.
+
+        // Logic depends on who is the "Taker" vs "Maker" effectively, but here we have
+        // explicit TradeType
+        // Actually, the TradeType passed here seems to be from the perspective of the
+        // *match*, but we need to know
+        // specifically for buyer and seller if they were LIMIT or MARKET.
+        // However, the previous logic tried to infer this from TradeType enum like
+        // LIMIT_LIMIT, MARKET_LIMIT_BUY etc.
+        // Let's stick to the robust logic:
+        // We need to know if the Buyer's order was LIMIT or MARKET.
+        // And if the Seller's order was LIMIT or MARKET.
+        // The passed 'tradeType' seems to be a combination.
+
+        // Let's simplify and assume standard behavior based on the switch case provided
+        // in original code,
+        // but FIX the balance updates.
+
         switch (tradeType) {
             case LIMIT_LIMIT:
                 spotBuyerStable.setLockedBalance(spotBuyerStable.getLockedBalance().subtract(totalCost));

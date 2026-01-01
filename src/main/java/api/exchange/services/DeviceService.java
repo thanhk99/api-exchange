@@ -43,6 +43,9 @@ public class DeviceService {
     public UserDevice saveDeviceInfo(User user, HttpServletRequest request) {
         // Tạo deviceId mới nếu chưa có từ client
         String userAgent = request.getHeader("User-Agent");
+        if (userAgent == null) {
+            userAgent = "Unknown/1.0";
+        }
         Parser uaParser = new Parser();
         Client client = uaParser.parse(userAgent);
         String deviceId = Optional.ofNullable(request.getHeader("Device-Id"))
@@ -72,6 +75,9 @@ public class DeviceService {
 
         // Fallback: Lấy từ User-Agent
         String userAgent = request.getHeader("User-Agent");
+        if (userAgent == null) {
+            return "Unknown Device";
+        }
         if (userAgent.contains("Android"))
             return "Android Device";
         if (userAgent.contains("iPhone"))
@@ -87,7 +93,11 @@ public class DeviceService {
     }
 
     private String detectDeviceType(HttpServletRequest request) {
-        String userAgent = request.getHeader("User-Agent").toLowerCase();
+        String header = request.getHeader("User-Agent");
+        if (header == null) {
+            return "UNKNOWN";
+        }
+        String userAgent = header.toLowerCase();
 
         if (userAgent.contains("mobile")) {
             return "MOBILE";

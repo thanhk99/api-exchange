@@ -166,14 +166,16 @@
 		</dependency>
 
 		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-amqp</artifactId>
-		</dependency>
-
-	<dependency>
 			<groupId>io.github.tronprotocol</groupId>
 			<artifactId>trident</artifactId>
 			<version>0.10.0</version>
+		</dependency>
+
+		<!-- Protobuf for Binary Format -->
+		<dependency>
+			<groupId>com.google.protobuf</groupId>
+			<artifactId>protobuf-java</artifactId>
+			<version>3.25.1</version>
 		</dependency>
 	</dependencies>
 

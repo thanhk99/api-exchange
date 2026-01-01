@@ -8,7 +8,6 @@ import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
@@ -21,7 +20,7 @@ import api.exchange.models.OrderBooks.TradeType;
 import api.exchange.repository.SpotWalletHistoryRepository;
 import api.exchange.repository.OrderBooksRepository;
 import api.exchange.sercurity.jwt.JwtUtil;
-import api.exchange.websocket.SpotOrderWebsocket;
+import api.exchange.websocket.SpotOrderWebSocket;
 import jakarta.transaction.Transactional;
 
 @Service
@@ -29,9 +28,6 @@ public class SpotService {
 
     @Autowired
     private SpotWalletHistoryRepository spotWalletHistoryRepository;
-
-    @Autowired
-    private ApplicationEventPublisher eventPublisher;
 
     @Autowired
     private OrderBooksRepository orderBooksRepository;
@@ -46,7 +42,7 @@ public class SpotService {
     private SpotOrderWebsocket spotOrderWebsocket;
 
     @Autowired
-    private org.springframework.amqp.rabbit.core.RabbitTemplate rabbitTemplate;
+    private SpotOrderWebSocket spotOrderWebsocket;
 
     @Autowired
     private api.exchange.repository.SpotWalletRepository spotWalletRepository;
@@ -100,17 +96,7 @@ public class SpotService {
         spotOrderWebsocket.broadcastOrderBooks(entity);
 
         OrderBooks orderSaved = orderBooksRepository.saveAndFlush(entity);
-
-        // Push to RabbitMQ for sequential processing after transaction commit
-        org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
-                new org.springframework.transaction.support.TransactionSynchronization() {
-                    @Override
-                    public void afterCommit() {
-                        rabbitTemplate.convertAndSend(api.exchange.config.RabbitMQConfig.EXCHANGE_NAME,
-                                "spot.match.created",
-                                orderSaved.getId());
-                    }
-                });
+        orderBooksService.matchOrders(orderSaved);
 
         return ResponseEntity.ok(Map.of("message", "success", "data", "Tạo Order thành công "));
     }
@@ -130,10 +116,8 @@ public class SpotService {
             order.setStatus(OrderStatus.CANCELLED);
             order.setUpdatedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
             orderBooksRepository.save(order);
-
-            return ResponseEntity.ok(Map.of("message", "success", "data", "Đã huỷ lệnh và hoàn tiền"));
         }
-        return ResponseEntity.badRequest().body(Map.of("message", "Bad Request", "data", "Không thể huỷ lệnh"));
+        return ResponseEntity.badRequest().body(Map.of("message", "Bad Request", "data", "Không thể huỷ lệnh "));
     }
 
     public Map<String, Object> getOrderBook(String symbol, int limit) {

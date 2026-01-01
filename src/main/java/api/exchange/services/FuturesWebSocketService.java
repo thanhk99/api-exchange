@@ -72,6 +72,14 @@ public class FuturesWebSocketService {
         }
     }
 
+    @jakarta.annotation.PreDestroy
+    public void cleanup() {
+        System.out.println("🛑 Closing Futures WebSocket Service...");
+        if (futuresMarketWebSocket != null) {
+            futuresMarketWebSocket.close();
+        }
+    }
+
     public void reconnect() {
         if (futuresMarketWebSocket != null && !futuresMarketWebSocket.isOpen()) {
             futuresMarketWebSocket.reconnect();

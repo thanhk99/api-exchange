@@ -33,26 +33,10 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(auth -> auth
-                        .dispatcherTypeMatchers(jakarta.servlet.DispatcherType.ASYNC).permitAll()
-                        .requestMatchers(
-                                "/api/v1/auth/login",
-                                "/api/v1/auth/signup",
-                                "/api/v1/auth/refresh",
-                                "/api/v1/auth/existEmail",
-                                "/api/v1/hisPriceCoin/**",
-                                "/api/v1/spot/kline/**",
-                                "/api/v1/spot/orderbook/**",
-                                "/api/v1/spot/trades/history/**",
-                                "/api/v1/klineSpot/**",
-                                "/api/v1/kline1s/**",
-                                "/api/v1/coin/**",
-                                "/api/v1/futures/coins",
-                                "/api/v1/futures/kline/**",
-                                "/api/v1/futures/orders/orderbook/**",
-                                "/ws/**")
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .requestMatchers("/api/v1/auth/**", "/api/v1/public/**", "/ws/**", "/api/v1/coin/**")
                         .permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/v1/futures/orders")
-                        .permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/futures/orders").permitAll()
                         .anyRequest().authenticated())
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS))

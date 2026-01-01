@@ -249,6 +249,11 @@ public class FuturesMarketWebSocket extends WebSocketClient {
             messagingTemplate.convertAndSend(topic, klineData);
 
         } catch (Exception e) {
+            String msg = e.getMessage();
+            if (msg != null && (msg.contains("destroyed") || msg.contains("closed"))) {
+                // Silently ignore during shutdown
+                return;
+            }
             System.err.println("Error processing 1s kline for " + symbol + ": " + e.getMessage());
         }
     }

@@ -13,15 +13,10 @@ public class RingBufferService {
 
     private static final int BUFFER_SIZE = 72; // Giới hạn 72 nến cho mỗi symbol
 
-    // Map để lưu trữ RingBuffer cho từng symbol
-    private final Map<String, RingBuffer<KlinesSpotResponse>> symbolBuffers = new ConcurrentHashMap<>();
+    private final Map<String, SpotRingBuffer<KlinesSpotResponse>> symbolBuffers = new ConcurrentHashMap<>();
 
-    // ReadWriteLock để đảm bảo thread-safe
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
 
-    /**
-     * Thêm dữ liệu kline mới vào RingBuffer của symbol tương ứng
-     */
     public void addKlineData(KlinesSpotResponse klineData) {
         if (klineData == null || klineData.getSymbol() == null) {
             return;
@@ -31,10 +26,21 @@ public class RingBufferService {
 
         lock.writeLock().lock();
         try {
-            RingBuffer<KlinesSpotResponse> buffer = symbolBuffers.computeIfAbsent(
+            SpotRingBuffer<KlinesSpotResponse> buffer = symbolBuffers.computeIfAbsent(
                     symbol,
-                    k -> new RingBuffer<>(BUFFER_SIZE));
-            buffer.add(klineData);
+                    k -> new SpotRingBuffer<>(BUFFER_SIZE));
+
+            KlinesSpotResponse last = buffer.peekLast();
+            if (last != null && last.getStartTime() == klineData.getStartTime()) {
+                // Trùng timestamp, cập nhật nến hiện tại (giữ giá open, update giá
+                // close/high/low/volume)
+                buffer.updateLast(klineData);
+            } else if (last == null || klineData.getStartTime() > last.getStartTime()) {
+                // Nến mới hoàn toàn
+                buffer.add(klineData);
+            }
+            // Bỏ qua nếu tin nhắn cũ hơn nến cuối (hiếm khi xảy ra nhưng giúp ổn định biểu
+            // đồ)
         } finally {
             lock.writeLock().unlock();
         }
@@ -52,7 +58,7 @@ public class RingBufferService {
 
         lock.readLock().lock();
         try {
-            RingBuffer<KlinesSpotResponse> buffer = symbolBuffers.get(upperSymbol);
+            SpotRingBuffer<KlinesSpotResponse> buffer = symbolBuffers.get(upperSymbol);
             if (buffer == null) {
                 return Collections.emptyList();
             }
@@ -77,7 +83,7 @@ public class RingBufferService {
 
         lock.readLock().lock();
         try {
-            RingBuffer<KlinesSpotResponse> buffer = symbolBuffers.get(upperSymbol);
+            SpotRingBuffer<KlinesSpotResponse> buffer = symbolBuffers.get(upperSymbol);
             return buffer != null ? buffer.size() : 0;
         } finally {
             lock.readLock().unlock();
@@ -131,9 +137,9 @@ public class RingBufferService {
     }
 
     /**
-     * RingBuffer implementation để lưu trữ dữ liệu với giới hạn kích thước
+     * SpotRingBuffer implementation để lưu trữ dữ liệu với giới hạn kích thước
      */
-    private static class RingBuffer<T> {
+    public static class SpotRingBuffer<T> {
         private final T[] buffer;
         private final int capacity;
         private int head = 0;
@@ -141,7 +147,7 @@ public class RingBufferService {
         private int count = 0;
 
         @SuppressWarnings("unchecked")
-        public RingBuffer(int capacity) {
+        public SpotRingBuffer(int capacity) {
             this.capacity = capacity;
             this.buffer = (T[]) new Object[capacity];
         }
@@ -155,6 +161,22 @@ public class RingBufferService {
             } else {
                 head = (head + 1) % capacity;
             }
+        }
+
+        public synchronized T peekLast() {
+            if (count == 0)
+                return null;
+            int lastIndex = (tail - 1 + capacity) % capacity;
+            return buffer[lastIndex];
+        }
+
+        public synchronized void updateLast(T item) {
+            if (count == 0) {
+                add(item);
+                return;
+            }
+            int lastIndex = (tail - 1 + capacity) % capacity;
+            buffer[lastIndex] = item;
         }
 
         public synchronized List<T> getAll() {

@@ -120,8 +120,8 @@ public class AuthService {
             // Lấy thông tin user
             User user = userRepository.findByEmail(loginRequest.getEmail());
             if (user == null) {
-                return ResponseEntity.badRequest()
-                        .body(Map.of("error", "Email already in use"));
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(Map.of("error", "LOGIN_ERROR", "message", "Tài khoản không tồn tại"));
             }
 
             UserDevice device = deviceService.saveDeviceInfo(user, request);
@@ -147,7 +147,9 @@ public class AuthService {
                             "error", "LOGIN_ERROR",
                             "message", "Tài khoản mật khẩu không đúng"));
         } catch (Exception e) {
-            throw new RuntimeException("Login failed", e);
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "SERVER_ERROR", "message", "Lỗi login: " + e.getMessage()));
         }
     }
 
