@@ -4,11 +4,9 @@ import api.exchange.dtos.Response.KlinesSpotResponse;
 import api.exchange.models.SpotKlineData1m;
 import api.exchange.models.SpotKlineData1h;
 import api.exchange.models.coinModel;
-import api.exchange.models.priceHistoryModel;
 import api.exchange.repository.SpotKlineData1mRepository;
 import api.exchange.repository.SpotKlineData1hRepository;
 import api.exchange.repository.coinRepository;
-import api.exchange.repository.priceHistoryRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -49,9 +47,6 @@ public class CoinDataService {
 
     @Autowired
     private coinRepository coinRepository;
-
-    @Autowired
-    private priceHistoryRepository priceHistoryRepository;
 
     @Value("${binance.api.url}")
     private String binanceApiUrl;
@@ -400,13 +395,6 @@ public class CoinDataService {
      */
     public List<String> getTrackedSymbols() {
         return new ArrayList<>(SYMBOLS);
-    }
-
-    /**
-     * Lấy lịch sử giá từ database
-     */
-    public List<priceHistoryModel> getListHisCoin(coinModel entity) {
-        return priceHistoryRepository.findTop288BySymbolOrderByTimestampDesc(entity.getSymbol());
     }
 
     /**

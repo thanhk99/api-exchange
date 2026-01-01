@@ -8,7 +8,6 @@ import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
@@ -16,10 +15,11 @@ import api.exchange.models.SpotWalletHistory;
 import api.exchange.models.OrderBooks;
 import api.exchange.models.OrderBooks.OrderStatus;
 import api.exchange.models.OrderBooks.OrderType;
+import api.exchange.models.OrderBooks.TradeType;
 import api.exchange.repository.SpotWalletHistoryRepository;
 import api.exchange.repository.OrderBooksRepository;
 import api.exchange.sercurity.jwt.JwtUtil;
-import api.exchange.websocket.SpotOrderWebsocket;
+import api.exchange.websocket.SpotOrderWebSocket;
 import jakarta.transaction.Transactional;
 
 @Service
@@ -27,9 +27,6 @@ public class SpotService {
 
     @Autowired
     private SpotWalletHistoryRepository spotWalletHistoryRepository;
-
-    @Autowired
-    private ApplicationEventPublisher eventPublisher;
 
     @Autowired
     private OrderBooksRepository orderBooksRepository;
@@ -44,7 +41,7 @@ public class SpotService {
     private OrderBooksService orderBooksService;
 
     @Autowired
-    private SpotOrderWebsocket spotOrderWebsocket;
+    private SpotOrderWebSocket spotOrderWebsocket;
 
     SpotService(SpotWalletHistoryRepository spotWalletHistoryRepository) {
         this.spotWalletHistoryRepository = spotWalletHistoryRepository;
@@ -96,7 +93,6 @@ public class SpotService {
 
         OrderBooks orderSaved = orderBooksRepository.saveAndFlush(entity);
         orderBooksService.matchOrders(orderSaved);
-        // eventPublisher.publishEvent(new OrderMatchService.OrderCreatedEvent(entity));
 
         return ResponseEntity.ok(Map.of("message", "success", "data", "Tạo Order thành công "));
     }
@@ -117,38 +113,6 @@ public class SpotService {
             orderBooksRepository.save(order);
         }
         return ResponseEntity.badRequest().body(Map.of("message", "Bad Request", "data", "Không thể huỷ lệnh "));
-    }
-
-    // Methods moved to SpotWalletService
-
-    @Transactional
-    public void checkWalletRecive(OrderBooks entity, String uid) {
-        String[] parts = entity.getSymbol().split("/");
-        String coin = parts[0];
-        String stable = parts[1];
-        if (entity.getOrderType().equals(OrderType.BUY)) {
-            SpotWallet spotWallet = spotWalletRepository.findByUidAndCurrency(uid, coin);
-            if (spotWallet == null) {
-                SpotWallet newWallet = new SpotWallet();
-                newWallet.setUid(uid);
-                newWallet.setCurrency(coin);
-                newWallet.setBalance(BigDecimal.ZERO);
-                newWallet.setLockedBalance(BigDecimal.ZERO);
-                newWallet.setActive(true);
-                spotWalletRepository.save(newWallet);
-            }
-        } else {
-            SpotWallet spotWallet = spotWalletRepository.findByUidAndCurrency(uid, stable);
-            if (spotWallet == null) {
-                SpotWallet newWallet = new SpotWallet();
-                newWallet.setUid(uid);
-                newWallet.setCurrency(stable);
-                newWallet.setBalance(BigDecimal.ZERO);
-                newWallet.setLockedBalance(BigDecimal.ZERO);
-                newWallet.setActive(true);
-                spotWalletRepository.save(newWallet);
-            }
-        }
     }
 
     public Map<String, Object> getOrderBook(String symbol, int limit) {

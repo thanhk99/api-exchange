@@ -9,7 +9,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 @Service
-public class SpotOrderWebsocket {
+public class SpotOrderWebSocket {
 
     @Autowired
     private SimpMessagingTemplate messagingTemplate;
@@ -18,7 +18,7 @@ public class SpotOrderWebsocket {
         Map<String, Object> orderData = new HashMap<>();
         orderData.put("type", order.getOrderType());
         orderData.put("price", order.getPrice());
-        orderData.put("quanlity", order.getQuantity());
+        orderData.put("quantity", order.getQuantity());
         orderData.put("timestamp", System.currentTimeMillis());
 
         messagingTemplate.convertAndSend("/topic/spot/orderbook", orderData);

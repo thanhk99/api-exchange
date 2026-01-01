@@ -1,29 +1,24 @@
 package api.exchange.websocket;
 
-import java.math.BigDecimal;
 import java.net.URI;
 
 import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.handshake.ServerHandshake;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 import api.exchange.dtos.Response.CoinSpotResponse;
+import api.exchange.proto.MarketDataProto;
 
 public class SpotMarketWebSocket extends WebSocketClient {
 
-    private final api.exchange.services.CoinDataService coinDataService;
     private final SimpMessagingTemplate messagingTemplate;
-    private final ObjectMapper objectMapper;
+    private final api.exchange.services.MarketDataProcessor marketDataProcessor;
 
-    public SpotMarketWebSocket(URI uri, SimpMessagingTemplate messagingTemplate, ObjectMapper objectMapper,
-            api.exchange.services.CoinDataService coinDataService) {
+    public SpotMarketWebSocket(URI uri, SimpMessagingTemplate messagingTemplate,
+            api.exchange.services.MarketDataProcessor marketDataProcessor) {
         super(uri);
         this.messagingTemplate = messagingTemplate;
-        this.objectMapper = objectMapper;
-        this.coinDataService = coinDataService;
+        this.marketDataProcessor = marketDataProcessor;
     }
 
     @Override
@@ -46,44 +41,28 @@ public class SpotMarketWebSocket extends WebSocketClient {
     @Override
     public void onMessage(String message) {
         try {
-            JsonNode jsonNode = objectMapper.readTree(message);
-            // Xử lý stream data từ Binance
-            if (jsonNode.has("stream") && jsonNode.has("data")) {
-                JsonNode data = jsonNode.get("data");
-                CoinSpotResponse filteredData = filterData(data);
-                messagingTemplate.convertAndSend("/topic/spot-prices", filteredData);
-            } else if (jsonNode.has("e") && jsonNode.has("s")) { // single stream 24hrTicker
-                CoinSpotResponse filteredData = filterData(jsonNode);
-                messagingTemplate.convertAndSend("/topic/spot-prices", filteredData);
-            }
-            // Xử lý response confirm subscription
-            else if (jsonNode.has("result") && jsonNode.has("id")) {
-                System.out.println("✅ Subscription confirmed: " + jsonNode.toString());
-            }
+            CoinSpotResponse filteredData = marketDataProcessor.processMessage(message);
 
+            if (filteredData != null) {
+                // 1. Send JSON (Legacy)
+                messagingTemplate.convertAndSend("/topic/spot-prices", filteredData);
+
+                // 2. Send Binary (Protobuf)
+                byte[] binaryData = MarketDataProto.serializeTicker(
+                        filteredData.getSymbol(),
+                        filteredData.getPrice() != null ? filteredData.getPrice().toString() : "0",
+                        filteredData.getChangePercent() != null ? filteredData.getChangePercent().toString() : "0",
+                        filteredData.getHigh24h() != null ? filteredData.getHigh24h().toString() : "0",
+                        filteredData.getLow24h() != null ? filteredData.getLow24h().toString() : "0",
+                        filteredData.getVolume() != null ? filteredData.getVolume().toString() : "0",
+                        filteredData.getTimestamp() != null ? filteredData.getTimestamp() : 0L,
+                        filteredData.getMarketCap() != null ? filteredData.getMarketCap().toString() : "0");
+                messagingTemplate.convertAndSend("/topic/spot-prices-binary", binaryData);
+            }
         } catch (Exception e) {
             System.err.println("❌ Error processing message: " + e.getMessage());
             e.printStackTrace();
         }
-    }
-
-    private CoinSpotResponse filterData(JsonNode node) {
-        String symbol = node.path("s").asText();
-        BigDecimal price = new BigDecimal(node.path("c").asText("0"));
-
-        // Calculate Market Cap
-        BigDecimal supply = coinDataService.getCirculatingSupply(symbol);
-        BigDecimal marketCap = price.multiply(supply);
-
-        return new CoinSpotResponse(
-                symbol,
-                price,
-                new BigDecimal(node.path("P").asText("0")),
-                new BigDecimal(node.path("h").asText("0")),
-                new BigDecimal(node.path("l").asText("0")),
-                new BigDecimal(node.path("v").asText("0")),
-                node.path("E").asLong(),
-                marketCap);
     }
 
     @Override

@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package api.exchange.proto;
+
+option java_package = "api.exchange.proto";
+option java_outer_classname = "MarketDataProto";
+
+message Ticker {
+  string symbol = 1;
+  string price = 2;        // Using string for BigDecimal to preserve precision
+  string priceChange = 3;
+  string high = 4;
+  string low = 5;
+  string volume = 6;
+  int64 eventTime = 7;
+  string marketCap = 8;
+}

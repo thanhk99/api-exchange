@@ -3,6 +3,7 @@ package api.exchange.services;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.Arrays;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -84,6 +85,11 @@ public class SpotWalletService {
                     symbol);
             throw new RuntimeException("Wallet not found for trade execution");
         }
+
+        SpotWallet spotBuyerReceive = spotBuyerCoin;
+        SpotWallet spotBuyerSend = spotBuyerStable;
+        SpotWallet spotSellerReceive = spotSellerStable;
+        SpotWallet spotSellerSend = spotSellerCoin;
 
         // 1. Handle Buyer's Stable Coin (Payment)
         // If Buyer was LIMIT/MARKET BUY -> They pay Stable Coin
