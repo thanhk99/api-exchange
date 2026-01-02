@@ -2,7 +2,6 @@ package api.exchange.controllers;
 
 import api.exchange.dtos.Request.FuturesOrderRequest;
 import api.exchange.models.FuturesOrder;
-import api.exchange.sercurity.jwt.JwtUtil;
 import api.exchange.sercurity.services.AuthenticationService;
 import api.exchange.services.FuturesOrderService;
 import org.springframework.beans.factory.annotation.Autowired;
