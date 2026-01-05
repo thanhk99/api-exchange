@@ -10,13 +10,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
+import org.springframework.transaction.annotation.Isolation;
+import java.util.UUID;
+
 import api.exchange.models.SpotWallet;
 import api.exchange.models.OrderBooks;
 import api.exchange.models.SpotHistory.TradeType;
 import api.exchange.models.SpotWalletHistory;
 import api.exchange.repository.SpotWalletHistoryRepository;
 import api.exchange.repository.SpotWalletRepository;
-import jakarta.transaction.Transactional;
+import org.springframework.transaction.annotation.Transactional;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -29,10 +32,15 @@ public class SpotWalletService {
     @Autowired
     private SpotWalletHistoryRepository spotWalletHistoryRepository;
 
-    @Transactional
-    public ResponseEntity<?> addBalanceCoin(SpotWallet entity) {
+    @Transactional(isolation = Isolation.SERIALIZABLE)
+    public ResponseEntity<?> addBalanceCoin(SpotWallet entity, String idempotencyKey) {
         try {
-            SpotWalletHistory spotWalletHistory = new SpotWalletHistory();
+            // Check idempotency first
+            if (idempotencyKey != null && spotWalletHistoryRepository.existsByIdempotencyKey(idempotencyKey)) {
+                log.warn("Duplicate request detected with idempotencyKey: {}", idempotencyKey);
+                return ResponseEntity.ok(Map.of("message", "DUPLICATE_REQUEST"));
+            }
+
             SpotWallet existingWallet = spotWalletRepository.findByUidAndCurrency(
                     entity.getUid(),
                     entity.getCurrency());
@@ -43,20 +51,24 @@ public class SpotWalletService {
                 postBalance = existingWallet.getBalance();
                 spotWalletRepository.save(existingWallet);
             } else {
-                entity.setUid(entity.getUid());
                 postBalance = entity.getBalance();
                 spotWalletRepository.save(entity);
             }
-            LocalDateTime createDt = LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh"));
-            spotWalletHistory.setUserId(entity.getUid());
-            spotWalletHistory.setAsset(entity.getCurrency());
-            spotWalletHistory.setType("Nạp tiền");
-            spotWalletHistory.setAmount(entity.getBalance());
-            spotWalletHistory.setBalance(postBalance);
-            spotWalletHistory.setCreateDt(createDt);
-            spotWalletHistoryRepository.save(spotWalletHistory);
+
+            // Ghi Ledger (Append-only)
+            SpotWalletHistory history = new SpotWalletHistory();
+            history.setUserId(entity.getUid());
+            history.setAsset(entity.getCurrency());
+            history.setType("Nạp tiền");
+            history.setAmount(entity.getBalance());
+            history.setBalance(postBalance);
+            history.setCreateDt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
+            history.setIdempotencyKey(idempotencyKey != null ? idempotencyKey : UUID.randomUUID().toString());
+            spotWalletHistoryRepository.save(history);
+
             return ResponseEntity.ok(Map.of("message", "success"));
         } catch (Exception e) {
+            log.error("Error adding balance", e);
             return ResponseEntity.internalServerError()
                     .body(Map.of("message", "SERVER_ERROR", "error", e.getMessage()));
         }

@@ -5,11 +5,13 @@ import java.util.Map;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Isolation;
 import org.tron.trident.core.ApiWrapper;
 import org.tron.trident.core.key.KeyPair;
 
@@ -42,22 +44,17 @@ public class FundingWalletService {
     @Autowired
     private api.exchange.repository.NotificationRepository notificationRepository;
 
-    // Tron Wallet Logic merged here
-
     public FundingWallet createTronWallet(String uid) {
-        // Check if user already has a TRX wallet
         FundingWallet existingWallet = fundingWalletRepository.findByUidAndCurrency(uid, "TRX");
         if (existingWallet != null && existingWallet.getAddress() != null) {
             return existingWallet;
         }
 
-        // Generate new key pair
         KeyPair keyPair = KeyPair.generate();
         String privateKey = keyPair.toPrivateKey();
         String address = keyPair.toBase58CheckAddress();
         String hexAddress = keyPair.toHexAddress();
 
-        // Encrypt private key
         String encryptedPrivateKey = encryptionService.encrypt(privateKey);
 
         if (existingWallet != null) {
@@ -79,7 +76,6 @@ public class FundingWalletService {
     }
 
     public long getTronBalance(String address) {
-        // Simple read-only wrapper
         ApiWrapper wrapper = null;
         try {
             wrapper = new ApiWrapper(api.exchange.config.TronConfig.TRON_FULL_NODE,
@@ -102,68 +98,86 @@ public class FundingWalletService {
         }
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.SERIALIZABLE)
     public ResponseEntity<?> addBalanceCoin(FundingWallet fundingWalletRes, String note, String status,
-            String address, BigDecimal fee, String hash) {
+            String address, BigDecimal fee, String hash, String idempotencyKey) {
         try {
-            FundingWalletHistory FundingWalletHistory = new FundingWalletHistory();
+            if (idempotencyKey != null && fundingWalletHistoryRepository.existsByIdempotencyKey(idempotencyKey)) {
+                log.warn("Duplicate funding request: {}", idempotencyKey);
+                return ResponseEntity.ok(Map.of("message", "DUPLICATE_REQUEST"));
+            }
+
+            fundingWalletRepository.advisoryLock(fundingWalletRes.getUid() + "_" + fundingWalletRes.getCurrency());
+
             FundingWallet existingWallet = fundingWalletRepository.findByUidAndCurrency(
                     fundingWalletRes.getUid(),
                     fundingWalletRes.getCurrency());
+
+            BigDecimal postBalance;
             if (existingWallet != null) {
                 existingWallet.setBalance(existingWallet.getBalance().add(fundingWalletRes.getBalance()));
-                FundingWalletHistory.setBalance(existingWallet.getBalance());
+                postBalance = existingWallet.getBalance();
                 fundingWalletRepository.save(existingWallet);
             } else {
-                fundingWalletRes.setUid(fundingWalletRes.getUid());
-                FundingWalletHistory.setBalance(fundingWalletRes.getBalance());
+                postBalance = fundingWalletRes.getBalance();
                 fundingWalletRepository.save(fundingWalletRes);
             }
-            LocalDateTime createDt = LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh"));
-            FundingWalletHistory.setUserId(fundingWalletRes.getUid());
-            FundingWalletHistory.setAsset(fundingWalletRes.getCurrency());
-            FundingWalletHistory.setType("Nạp tiền");
-            FundingWalletHistory.setAmount(fundingWalletRes.getBalance());
-            FundingWalletHistory.setCreateDt(createDt);
-            FundingWalletHistory.setNote(note != null ? note : "");
-            FundingWalletHistory.setStatus(status != null ? status : "SUCCESS");
-            FundingWalletHistory.setAddress(address);
-            FundingWalletHistory.setFee(fee != null ? fee : BigDecimal.ZERO);
-            FundingWalletHistory.setHash(hash); // Save Hash
-            fundingWalletHistoryRepository.save(FundingWalletHistory);
 
-            // Send SSE Notification
-            try {
-                api.exchange.models.Notification notification = new api.exchange.models.Notification();
-                notification.setUserId(fundingWalletRes.getUid());
-                notification.setNotificationTitle("Nạp tiền thành công");
-                notification.setNotificationContent(String.format("Bạn đã nhận được %s %s",
-                        fundingWalletRes.getBalance().stripTrailingZeros().toPlainString(),
-                        fundingWalletRes.getCurrency()));
-                notification.setNotificationType(api.exchange.models.Notification.NotificationType.INFO);
-                notification.setNotificationType(api.exchange.models.Notification.NotificationType.INFO);
+            FundingWalletHistory history = new FundingWalletHistory();
+            history.setUserId(fundingWalletRes.getUid());
+            history.setAsset(fundingWalletRes.getCurrency());
+            history.setType("Nạp tiền");
+            history.setAmount(fundingWalletRes.getBalance());
+            history.setBalance(postBalance);
+            history.setCreateDt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
+            history.setNote(note != null ? note : "");
+            history.setStatus(status != null ? status : "SUCCESS");
+            history.setAddress(address);
+            history.setFee(fee != null ? fee : BigDecimal.ZERO);
+            history.setHash(hash);
+            history.setIdempotencyKey(idempotencyKey != null ? idempotencyKey : UUID.randomUUID().toString());
+            fundingWalletHistoryRepository.save(history);
 
-                // Persist notification
-                notificationRepository.save(notification);
-
-                // Send via SSE
-                sseNotificationService.sendNotification(fundingWalletRes.getUid(), notification);
-            } catch (Exception e) {
-                log.error("Failed to send SSE notification", e);
-            }
+            sendTransactionNotification(fundingWalletRes);
 
             return ResponseEntity.ok(Map.of("message", "success"));
         } catch (Exception e) {
+            log.error("Error processing funding addBalanceCoin", e);
             return ResponseEntity.internalServerError()
                     .body(Map.of("message", "SERVER_ERROR", "error", e.getMessage()));
         }
     }
 
-    // Overload for backward compatibility
-    @Transactional
+    private void sendTransactionNotification(FundingWallet wallet) {
+        try {
+            api.exchange.models.Notification notification = new api.exchange.models.Notification();
+            notification.setUserId(wallet.getUid());
+            notification.setNotificationTitle("Nạp tiền thành công");
+            notification.setNotificationContent(String.format("Bạn đã nhận được %s %s",
+                    wallet.getBalance().stripTrailingZeros().toPlainString(),
+                    wallet.getCurrency()));
+            notification.setNotificationType(api.exchange.models.Notification.NotificationType.INFO);
+            notificationRepository.save(notification);
+            sseNotificationService.sendNotification(wallet.getUid(), notification);
+        } catch (Exception e) {
+            log.error("Failed to send SSE notification", e);
+        }
+    }
+
+    @Transactional(isolation = Isolation.SERIALIZABLE)
     public ResponseEntity<?> addBalanceCoin(FundingWallet fundingWalletRes, String note, String status,
-            String address, BigDecimal fee) {
-        return addBalanceCoin(fundingWalletRes, note, status, address, fee, null);
+            String address, BigDecimal fee, String hash) {
+        return addBalanceCoin(fundingWalletRes, note, status, address, fee, hash, null);
+    }
+
+    @Transactional(isolation = Isolation.SERIALIZABLE)
+    public ResponseEntity<?> addBalanceCoin(FundingWallet fundingWalletRes, String note) {
+        return addBalanceCoin(fundingWalletRes, note, "SUCCESS", null, BigDecimal.ZERO, null, null);
+    }
+
+    @Transactional(isolation = Isolation.SERIALIZABLE)
+    public ResponseEntity<?> addBalanceCoin(FundingWallet fundingWalletRes) {
+        return addBalanceCoin(fundingWalletRes, null);
     }
 
     @Transactional
@@ -171,20 +185,9 @@ public class FundingWalletService {
         fundingWalletHistoryRepository.save(history);
     }
 
-    @Transactional
-    public ResponseEntity<?> addBalanceCoin(FundingWallet fundingWalletRes, String note) {
-        return addBalanceCoin(fundingWalletRes, note, "SUCCESS", null, BigDecimal.ZERO, null);
-    }
-
-    @Transactional
-    public ResponseEntity<?> addBalanceCoin(FundingWallet fundingWalletRes) {
-        return addBalanceCoin(fundingWalletRes, null);
-    }
-
     public ResponseEntity<?> getWalletFunding(String header) {
         String jwt = header.substring(7);
         String uid = jwtUtil.getUserIdFromToken(jwt);
-
         try {
             if (uid == null) {
                 return ResponseEntity.badRequest().body(Map.of("message", "Invalid token"));
@@ -200,7 +203,6 @@ public class FundingWalletService {
     public ResponseEntity<?> getTotalMoney(String header) {
         String jwt = header.substring(7);
         String uid = jwtUtil.getUserIdFromToken(jwt);
-
         try {
             if (uid == null) {
                 return ResponseEntity.badRequest().body(Map.of("message", "Invalid token"));
@@ -208,7 +210,6 @@ public class FundingWalletService {
             List<FundingWallet> listWallet = fundingWalletRepository.findAllByUid(uid);
             BigDecimal totalMoney = BigDecimal.ZERO;
             for (FundingWallet wallet : listWallet) {
-                // Giả sử bạn có một phương thức để lấy tỷ giá quy đổi từ đồng tiền này sang USD
                 BigDecimal exchangeRate = getExchangeRateToUSD(wallet.getCurrency());
                 totalMoney = totalMoney.add(wallet.getBalance().multiply(exchangeRate));
             }
@@ -220,19 +221,16 @@ public class FundingWalletService {
     }
 
     public BigDecimal getExchangeRateToUSD(String currency) {
-        // Đây là một ví dụ giả định. Trong thực tế, bạn sẽ cần tích hợp với một dịch vụ
-        // cung cấp tỷ giá hối đoái.
         switch (currency) {
             case "USD":
-                return BigDecimal.ONE;
             case "USDT":
-                return BigDecimal.ONE; // Giả sử 1 EUR = 1.1 USD
+                return BigDecimal.ONE;
             case "BTC":
-                return new BigDecimal("30000"); // Giả sử 1 BTC = 30000 USD
+                return new BigDecimal("30000");
             case "ETH":
-                return new BigDecimal("2000"); // Giả sử 1 ETH = 2000 USD
+                return new BigDecimal("2000");
             default:
-                return BigDecimal.ZERO; // Nếu không biết tỷ giá, trả về 0
+                return BigDecimal.ZERO;
         }
     }
 }

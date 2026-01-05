@@ -10,4 +10,5 @@ public interface SpotWalletHistoryRepository extends JpaRepository<SpotWalletHis
 
     List<SpotWalletHistory> findByUserId(String userId);
 
+    boolean existsByIdempotencyKey(String idempotencyKey);
 }

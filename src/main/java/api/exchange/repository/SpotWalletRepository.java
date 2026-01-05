@@ -17,5 +17,9 @@ public interface SpotWalletRepository extends JpaRepository<SpotWallet, Long> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT w FROM SpotWallet w WHERE w.uid = :uid AND w.currency = :currency")
     SpotWallet findByUidAndCurrencyWithLock(@Param("uid") String uid, @Param("currency") String currency);
+
     List<SpotWallet> findAllByUid(String uid);
+
+    @Query(value = "SELECT pg_advisory_xact_lock(hashtext(:lockKey))", nativeQuery = true)
+    void advisoryLock(@Param("lockKey") String lockKey);
 }

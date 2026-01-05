@@ -7,17 +7,18 @@ import org.springframework.web.bind.annotation.*;
 import api.exchange.models.SpotWallet;
 import api.exchange.services.SpotWalletService;
 
-
 @RestController
 @RequestMapping("/api/v1/spot-wallet")
 public class SpotWalletController {
-    
-    @Autowired 
+
+    @Autowired
     private SpotWalletService spotWalletService;
 
     @PostMapping("/addBalance")
-    public ResponseEntity<?> addBalance(@RequestBody SpotWallet spotWallet) {
-        return spotWalletService.addBalanceCoin(spotWallet);
+    public ResponseEntity<?> addBalance(
+            @RequestBody SpotWallet spotWallet,
+            @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey) {
+        return spotWalletService.addBalanceCoin(spotWallet, idempotencyKey);
     }
-    
+
 }

@@ -20,9 +20,11 @@ public class FundingWalletController {
     private FundingWalletService fundingWalletService;
 
     @PostMapping("addBalance")
-    public ResponseEntity<?> addBalance(@RequestBody FundingWallet fundingWallet,
-            @RequestHeader("Authorization") String authHeader) {
-        return fundingWalletService.addBalanceCoin(fundingWallet);
+    public ResponseEntity<?> addBalance(
+            @RequestBody FundingWallet fundingWallet,
+            @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey) {
+        return fundingWalletService.addBalanceCoin(fundingWallet, null, "SUCCESS", null, java.math.BigDecimal.ZERO,
+                null, idempotencyKey);
     }
 
     @GetMapping("getWallet")

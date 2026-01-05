@@ -13,4 +13,6 @@ public interface FundingWalletHistoryRepository extends JpaRepository<FundingWal
     boolean existsByNoteContaining(String note);
 
     FundingWalletHistory findFirstByNoteContaining(String note);
+
+    boolean existsByIdempotencyKey(String idempotencyKey);
 }
