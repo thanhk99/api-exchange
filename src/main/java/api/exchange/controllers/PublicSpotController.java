@@ -46,7 +46,7 @@ public class PublicSpotController {
 
     @PostMapping("/kline")
     public ResponseEntity<Map<String, Object>> getKlineData(@RequestBody SpotKlineRequest request,
-            @RequestParam(defaultValue = "72") int limit) {
+            @RequestParam(defaultValue = "500") int limit) {
 
         try {
             List<KlinesSpotResponse> klineData = getKlineDataByInterval(request.getSymbol(), request.getInterval(),
@@ -76,6 +76,8 @@ public class PublicSpotController {
 
     private List<KlinesSpotResponse> getKlineDataByInterval(String symbol, String interval, int limit) {
         switch (interval.toLowerCase()) {
+            case "1s":
+                return klineCalculationService.get1sKlines(symbol, limit);
             case "1m":
                 return klineCalculationService.get1mKlines(symbol, limit);
             case "5m":
@@ -96,7 +98,7 @@ public class PublicSpotController {
     @GetMapping("/kline/intervals")
     public ResponseEntity<Map<String, Object>> getSupportedIntervals() {
         try {
-            String[] intervals = { "1m", "5m", "15m", "1h", "6h", "12h" };
+            String[] intervals = { "1s", "1m", "5m", "15m", "1h", "6h", "12h" };
 
             Map<String, Object> response = new HashMap<>();
             response.put("intervals", intervals);

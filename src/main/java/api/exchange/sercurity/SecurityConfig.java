@@ -34,7 +34,8 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .requestMatchers("/api/v1/auth/**", "/api/v1/public/**", "/ws/**", "/api/v1/coin/**")
+                        .requestMatchers("/api/v1/auth/**", "/api/v1/public/**", "/ws/**", "/api/v1/coin/**",
+                                "/api/v1/p2pads/getList/**")
                         .permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/futures/orders").permitAll()
                         .anyRequest().authenticated())

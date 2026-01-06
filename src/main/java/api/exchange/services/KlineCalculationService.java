@@ -9,7 +9,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
@@ -24,7 +23,35 @@ public class KlineCalculationService {
     private SpotKlineData1hRepository spotKlineData1hRepository;
 
     @Autowired
-    private CoinDataService coinDataService;
+    private api.exchange.repository.SpotKlineData1sRepository spotKlineData1sRepository;
+
+    /**
+     * Lấy dữ liệu kline 1s từ database
+     */
+    public List<KlinesSpotResponse> get1sKlines(String symbol, int limit) {
+        List<KlinesSpotResponse> result = new ArrayList<>();
+        try {
+            List<api.exchange.models.SpotKlineData1s> klines1s = spotKlineData1sRepository.findLatestKlines(symbol,
+                    limit);
+            for (api.exchange.models.SpotKlineData1s kline : klines1s) {
+                KlinesSpotResponse response = new KlinesSpotResponse(
+                        kline.getSymbol(),
+                        kline.getOpenPrice(),
+                        kline.getClosePrice(),
+                        kline.getHighPrice(),
+                        kline.getLowPrice(),
+                        kline.getVolume(),
+                        kline.getStartTime().atZone(ZoneId.systemDefault()).toInstant().toEpochMilli(),
+                        kline.getCloseTime().atZone(ZoneId.systemDefault()).toInstant().toEpochMilli(),
+                        "1s",
+                        kline.getIsClosed());
+                result.add(response);
+            }
+        } catch (Exception e) {
+            System.err.println("❌ Error getting 1s klines for " + symbol + ": " + e.getMessage());
+        }
+        return result;
+    }
 
     /**
      * Tính toán dữ liệu kline 5m từ dữ liệu 1m

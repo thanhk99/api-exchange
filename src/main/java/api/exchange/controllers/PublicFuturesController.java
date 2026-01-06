@@ -58,7 +58,7 @@ public class PublicFuturesController {
 
     @PostMapping("/kline")
     public ResponseEntity<Map<String, Object>> getKlineData(@RequestBody FuturesKlineRequest request,
-            @RequestParam(defaultValue = "72") int limit,
+            @RequestParam(defaultValue = "500") int limit,
             @RequestParam(required = false) Long endTime) {
 
         try {
